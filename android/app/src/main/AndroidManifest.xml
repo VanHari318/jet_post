@@ -1,4 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internet & Network permissions for Firebase & OpenStreetMap -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+    <!-- GPS & Location permissions for Driver & Customer Tracking -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- Background Location Service for Driver (Foreground Service) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+
+    <!-- Camera for eKYC & Proof of Delivery (PoD) Photo -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Direct calling for passenger & consignee contact -->
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
+
     <application
         android:label="jet_post"
         android:name="${applicationName}"

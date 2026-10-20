@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "606541872529",
+    "project_id": "jet-post",
+    "storage_bucket": "jet-post.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:606541872529:android:41b10bd59af36a58682e30",
+        "android_client_info": {
+          "package_name": "com.example.jet_post"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC27j92NOAhpOA635ogvfoYqcud0OMqLMo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
