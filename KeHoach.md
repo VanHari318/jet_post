@@ -180,7 +180,7 @@ Thành viên 1     Thành viên 2     Thành viên 3        Thành viên 4
   * *Chu trình Giao hàng chuẩn Logistics (PoD):*
     1. Đến điểm lấy hàng bấm **"Đã lấy hàng từ người gửi"**.
     2. Di chuyển đến điểm giao bấm **"Đã đến nơi giao"**.
-    3. App kích hoạt camera yêu cầu tài xế: **Chụp ảnh gói hàng tại địa chỉ giao/người nhận cầm hàng (Proof of Delivery Photo)** tải lên Cloud Storage.
+    3. App kích hoạt camera yêu cầu tài xế: **Chụp ảnh gói hàng tại địa chỉ giao/người nhận cầm hàng (Proof of Delivery Photo)** tải lên Cloudinary (phân loại vào folder `jetpost/deliveries_pod`).
     4. Tài xế hỏi người nhận và nhập **mã OTP 4 số** vào ô xác thực trên màn hình.
     5. Hệ thống kiểm tra mã OTP khớp -> Bấm **"Xác nhận giao thành công"** -> Thu tiền mặt cước phí.
   * *Xử lý khi khách không nhận hàng:* Bấm "Không thể giao hàng" -> Chọn lý do (Khách không nghe máy sau 3 cuộc gọi, sai địa chỉ) -> Chuyển đơn sang trạng thái `FAILED_DELIVERY` chờ chuyển hoàn về người gửi.
@@ -233,7 +233,7 @@ Thành viên 1     Thành viên 2     Thành viên 3        Thành viên 4
   1. Chọn "Đăng ký làm Tài xế" -> Xác thực SĐT qua OTP thành công.
   2. Điền thông tin cá nhân, loại xe, biển số xe máy.
   3. Tích hợp Camera chụp ảnh rõ nét: Căn cước công dân (CCCD 2 mặt) và Giấy phép lái xe (GPLX).
-  4. Xử lý nén ảnh và tải lên Firebase Cloud Storage an toàn.
+  4. Tải lên Cloudinary an toàn (phân loại vào folder `jetpost/drivers_ekyc`).
   5. Lưu thông tin hồ sơ vào collection `drivers` với trạng thái `PENDING_APPROVAL`.
   6. Màn hình app hiển thị thông báo: "Hồ sơ của bạn đang được xét duyệt, vui lòng chờ Admin thẩm định".
 
@@ -243,7 +243,7 @@ Thành viên 1     Thành viên 2     Thành viên 3        Thành viên 4
 * **Luồng hoạt động:**
   1. Người dùng vào mục "Hồ sơ cá nhân".
   2. Hiển thị thông tin: Họ tên, Số điện thoại, Email liên kết, Ảnh đại diện (Avatar).
-  3. Cho phép chỉnh sửa Tên, tải ảnh đại diện mới từ thư viện ảnh máy lên Cloud Storage.
+  3. Cho phép chỉnh sửa Tên, tải ảnh đại diện mới từ thư viện ảnh máy lên Cloudinary (phân loại vào folder `jetpost/avatars`).
   4. Tính năng "Đổi số điện thoại": Yêu cầu nhập SĐT mới -> Gửi mã OTP xác minh SĐT mới thành công thì mới cho cập nhật dữ liệu trên Firestore.
 
 #### Task 3.5 - Quản lý Phân quyền theo Vai trò (Role-Based Access Control - RBAC Guard) & Lưu phiên Auto-login
@@ -307,7 +307,7 @@ Thành viên 1     Thành viên 2     Thành viên 3        Thành viên 4
 * **Trường hợp sử dụng:** Có tài xế mới gửi hồ sơ đăng ký tham gia mạng lưới.
 * **Luồng hoạt động:**
   1. Tab "Duyệt hồ sơ" hiển thị danh sách tài xế ở trạng thái `PENDING_APPROVAL`.
-  2. Admin bấm vào từng hồ sơ -> Màn hình hiển thị thông tin cá nhân và ảnh chụp phóng to GPLX, CCCD từ Cloud Storage.
+  2. Admin bấm vào từng hồ sơ -> Màn hình hiển thị thông tin cá nhân và ảnh chụp phóng to GPLX, CCCD từ Cloudinary CDN.
   3. Nếu hợp lệ: Bấm **"Phê duyệt"** -> Tài khoản tài xế chuyển thành `ACTIVE`, tài xế có thể bật Online nhận cuốc.
   4. Nếu giấy tờ mờ/sai: Bấm **"Từ chối"** -> Hiện form nhập lý do (VD: "Ảnh bằng lái bị lóa, vui lòng chụp lại") để gửi thông báo về máy tài xế.
 
@@ -417,11 +417,12 @@ Trong **1 Project Flutter duy nhất**, thư mục `lib/` được phân tách �
 ```
 lib/
 ├── core/                        # Tầng Dùng chung Hạ tầng (Core Infrastructure)
-│   ├── constants/               # Cấu hình màu sắc, hằng số hệ thống, API URLs
+│   ├── constants/               # Cấu hình màu sắc, hằng số hệ thống, API URLs, CloudinaryConfig
 │   ├── services/                # Các dịch vụ nền tảng dùng chung:
-│   │   ├── firebase_core.dart   # Khởi tạo Firebase App
-│   │   └── map_service.dart     # Kết nối OpenRouteService API vẽ tuyến đường & Geocoding
-│   └── utils/                   # Hàm tiện ích: Định dạng tiền tệ, ngày giờ, tính khoảng cách GPS
+│   │   ├── firebase_service.dart # Khởi tạo Firebase App & Cloud Firestore
+│   │   ├── cloudinary_service.dart # Tải ảnh lên Cloudinary (Signed Upload vào jetpost/)
+│   │   └── openroute_client.dart # Kết nối OpenRouteService API vẽ tuyến đường & Geocoding
+│   └── utils/                   # Hàm tiện ích: Định dạng tiền tệ, ngày giờ, tính khoảng cách GPS, Geohash
 ├── models/                      # Dùng chung Thực thể Dữ liệu: User, Ride, Delivery, Enums
 ├── modules/                     # 4 Phân hệ Nghiệp vụ Tự chủ (Autonomous Feature Modules)
 │   ├── customer/                # [Thành viên 1] Khách hàng & Đặt cuốc
@@ -433,12 +434,12 @@ lib/
 │   │   ├── screens/             # Màn hình: Bật online, pop-up nhận đơn, điều hướng Maps, PoD
 │   │   ├── widgets/             # Thành phần: Nút trượt nhận cuốc, radar đếm ngược
 │   │   └── services/            
-│   │       └── driver_service.dart   # Service 2: GPS Foreground Service, bắt đơn Firestore, nạp ảnh PoD
+│   │       └── driver_service.dart   # Service 2: GPS Foreground Service, bắt đơn Firestore, nạp ảnh PoD Cloudinary
 │   ├── user/                    # [Thành viên 3] User Module & Hạ tầng Định danh
 │   │   ├── screens/             # Màn hình: Welcome Gate, OTP Login, eKYC Camera, Profile, Cài đặt, InboxScreen, DirectChatScreen
 │   │   ├── widgets/             # Thành phần: Khung nhập OTP, nút chuyển vai trò (Demo Switcher), ChatBubbleWidget, ConversationCard
 │   │   └── services/            
-│   │       └── user_service.dart     # Service 3: Phone Auth Firebase, nạp ảnh CCCD/GPLX, lưu phiên Auto-login, P2P Chat stream
+│   │       └── user_service.dart     # Service 3: Phone Auth Firebase, nạp ảnh CCCD/GPLX Cloudinary, lưu phiên Auto-login, P2P Chat stream
 │   └── admin/                   # [Thành viên 4] Quản trị Điều hành & Nền tảng
 │       ├── screens/             # Màn hình: Radar toàn thành phố, thẩm định KYC, biểu cước, doanh thu, phát thông báo
 │       ├── widgets/             # Thành phần: Thẻ tài xế trên bản đồ, bảng duyệt hồ sơ, khung phát tin broadcast
@@ -478,6 +479,18 @@ lib/
      * Chủ dự án Firebase bắt buộc phải thu thập đầy đủ mã SHA-1 và SHA-256 của **cả 4 thành viên** và dán vào mục *Project Settings -> Your apps (Android) -> Add fingerprint* trên Firebase Console. Nếu chỉ thêm mã SHA của 1 người thì 3 thành viên còn lại khi chạy app sẽ lập tức bị Firebase chặn và báo lỗi xác thực (`app-not-authorized`).
    - *Biện pháp 3 - Cơ chế Rate Limiting Phía Client:*
      * Thiết lập đồng hồ đếm ngược (Cooldown Timer) tối thiểu 60 giây khóa nút "Gửi lại OTP" trên giao diện để triệt tiêu hoàn toàn hành vi spam nút bấm gây lãng phí request xác thực.
+
+---
+
+5. **Chiến lược Lưu trữ Ảnh Miễn phí Vĩnh viễn với Cloudinary (Thay thế Firebase Storage):**
+   - *Lý do chuyển đổi:* Firebase Cloud Storage hiện tại trên các tài khoản Google Cloud mới tạo thường bắt buộc kích hoạt gói trả phí Blaze Plan (yêu cầu liên kết thẻ tín dụng quốc tế Visa/Mastercard), gây rào cản tài chính và tiềm ẩn nguy cơ phát sinh cước ngoài ý muốn cho đồ án sinh viên.
+   - *Giải pháp Cloudinary Free Tier:* Chuyển 100% việc lưu trữ tệp đa phương tiện sang **Cloudinary** với hạn mức miễn phí hào phóng 25 Credits/tháng (~25GB lưu trữ hoặc 25GB băng thông CDN), 100% không yêu cầu thẻ tín dụng, an toàn tuyệt đối.
+   - *Cấu trúc Phân cấp Thư mục Tự động trong `jetpost/`:*
+     * `jetpost/avatars/`: Lưu ảnh đại diện tài khoản (`avatar_{userId}.jpg`).
+     * `jetpost/drivers_ekyc/`: Lưu ảnh CCCD 2 mặt và giấy phép lái xe eKYC (`{driverId}_{docType}_{timestamp}.jpg`).
+     * `jetpost/deliveries_pod/`: Lưu ảnh chụp bằng chứng giao hàng PoD (`pod_{deliveryId}_{timestamp}.jpg`).
+   - *Cơ chế Ký số Bảo mật (Signed Upload):* Ứng dụng tự động sinh chữ ký bảo mật HMAC-SHA1 từ `apiKey` và `apiSecret` để đẩy ảnh trực tiếp lên đúng thư mục mong muốn mà không cần tạo upload preset thủ công.
+   - *Tối ưu hóa Băng thông CDN tự động:* Tận dụng sức mạnh Cloudinary CDN để tự động nén ảnh (`q_auto`), chuyển sang định dạng WebP siêu nhẹ (`f_auto`) và resize ảnh trực tiếp qua URL, giúp ứng dụng di động tải ảnh siêu tốc và không tốn pin thiết bị khi nén ảnh cục bộ.
 
 ---
 
@@ -613,7 +626,7 @@ Hệ thống JetPost vận hành 2 luồng mã OTP với mục đích, nguồn g
 
 5. **`deliveries` (Root Collection - Nghiệp vụ Giao hàng Nhanh An toàn PoD):**
    - Khóa chính: `id` (Tracking ID).
-   - Các trường: `senderId` (String), `senderName` (String), `senderPhone` (String), `receiverName` (String), `receiverPhone` (String, dùng tra cứu Consignee), `driverId` (String, Nullable), `driverName` (String, Nullable), `driverPhone` (String, Nullable), `driverPlate` (String, Nullable), `pickupAddress` (String), `pickupLat` / `pickupLng` (Double), `dropoffAddress` (String), `dropoffLat` / `dropoffLng` (Double), `pickupGeohash` (String), `distanceKm` (Double), `routePolyline` (String, Nullable), `price` (Double), `systemFee` (Double), `driverIncome` (Double), `paymentMethod` (String, 'CASH'), `packageType` (`DOCUMENT` | `FOOD` | `ELECTRONICS` | `CLOTHING` | `OTHER`), `packageNotes` (String), `handoverOtp` (String, 4 số ngẫu nhiên), `podPhotoUrl` (String, ảnh Storage), `status` (`PENDING_DRIVER` | `ACCEPTED` | `IN_TRANSIT` | `COMPLETED` | `CANCELLED`), `cancelReason` (String, Nullable), `cancelledBy` (String, Nullable), `rating` (Integer, Nullable), `reviewComment` (String, Nullable), `createdAt` (Timestamp), `acceptedAt` (Timestamp, Nullable), `deliveredAt` (Timestamp, Nullable).
+   - Các trường: `senderId` (String), `senderName` (String), `senderPhone` (String), `receiverName` (String), `receiverPhone` (String, dùng tra cứu Consignee), `driverId` (String, Nullable), `driverName` (String, Nullable), `driverPhone` (String, Nullable), `driverPlate` (String, Nullable), `pickupAddress` (String), `pickupLat` / `pickupLng` (Double), `dropoffAddress` (String), `dropoffLat` / `dropoffLng` (Double), `pickupGeohash` (String), `distanceKm` (Double), `routePolyline` (String, Nullable), `price` (Double), `systemFee` (Double), `driverIncome` (Double), `paymentMethod` (String, 'CASH'), `packageType` (`DOCUMENT` | `FOOD` | `ELECTRONICS` | `CLOTHING` | `OTHER`), `packageNotes` (String), `handoverOtp` (String, 4 số ngẫu nhiên), `podPhotoUrl` (String, ảnh Cloudinary CDN), `status` (`PENDING_DRIVER` | `ACCEPTED` | `IN_TRANSIT` | `COMPLETED` | `CANCELLED`), `cancelReason` (String, Nullable), `cancelledBy` (String, Nullable), `rating` (Integer, Nullable), `reviewComment` (String, Nullable), `createdAt` (Timestamp), `acceptedAt` (Timestamp, Nullable), `deliveredAt` (Timestamp, Nullable).
 
 6. **`conversations` (Root Collection - Hạ tầng Phòng chat P2P 1-1):**
    - Khóa chính: `id` (Cấu trúc ghép nối 2 UID theo alphabet: `minUid_maxUid`).
