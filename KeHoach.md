@@ -215,36 +215,50 @@ Thành viên 1     Thành viên 2     Thành viên 3        Thành viên 4
   2. Cung cấp nút chuyển đổi nhanh vai trò (**Demo Role Switcher**) để phục vụ kiểm thử và bảo vệ trước hội đồng.
   3. Quản lý lưu phiên đăng nhập (Auto-login / Keep-login qua SharedPreferences). Khi bấm "Đăng xuất" sẽ xóa phiên và quay lại màn hình Welcome Gate.
 
-#### Task 3.2 - Động cơ Xác thực Đa tầng qua Số điện thoại (Phone Auth Engine)
-* **Mô tả:** Xây dựng dịch vụ xác thực số điện thoại qua Firebase Phone Authentication với đầy đủ lớp bảo mật chống giả mạo.
-* **Trường hợp sử dụng:** Khách hàng hoặc tài xế đăng ký / đăng nhập vào hệ thống.
+#### Task 3.2 - Động cơ Xác thực Đa kênh: Số điện thoại (Phone OTP) & Email/Mật khẩu (Omni-Channel Auth Engine)
+* **Mô tả:** Xây dựng hệ thống xác thực kép linh hoạt cho người dùng: Xác thực qua Số điện thoại (Firebase Phone Auth OTP) và Xác thực qua Email/Mật khẩu (Firebase Email/Password Authentication), hỗ trợ liên kết chéo danh tính (Account Linking) và khôi phục mật khẩu đa kênh.
+* **Trường hợp sử dụng:** Khách hàng, tài xế hoặc quản trị viên đăng ký, đăng nhập vào hệ thống; khôi phục mật khẩu khi quên; đăng nhập khi mất SIM hoặc thiết bị mới.
 * **Luồng hoạt động:**
-  1. Người dùng nhập Số điện thoại -> Gọi hàm chuẩn hóa sang định dạng E.164 (`+84...`).
-  2. Áp dụng thuật toán Regex kiểm duyệt nghiêm ngặt: Chỉ chấp nhận các đầu số hợp lệ của các nhà mạng Việt Nam (`03, 05, 07, 08, 09` đúng 10 chữ số). Từ chối số ảo, số máy bàn.
-  3. Tích hợp Firebase Phone Auth gửi mã SMS OTP 6 chữ số về SIM điện thoại; kích hoạt Firebase App Check / reCAPTCHA Invisible để chặn bot spam OTP.
-  4. Có cơ chế Rate Limiting: Khóa nút "Gửi lại OTP" đếm ngược 60 giây.
-  5. Người dùng nhập mã OTP -> Xác thực với Firebase -> Thành công thì chuyển sang bước lưu hồ sơ hoặc vào ứng dụng.
-  6. Tích hợp sẵn Whitelist Testing Numbers (số điện thoại thử nghiệm miễn phí) trên Firebase Console để demo không tốn phí SMS.
+  1. *Đăng nhập / Đăng ký qua Số điện thoại (SMS OTP):*
+     - Người dùng nhập Số điện thoại -> Gọi hàm chuẩn hóa sang định dạng E.164 (`+84...`).
+     - Áp dụng thuật toán Regex kiểm duyệt nghiêm ngặt: Chỉ chấp nhận các đầu số hợp lệ của các nhà mạng Việt Nam (`03, 05, 07, 08, 09` đúng 10 chữ số). Từ chối số ảo, số máy bàn.
+     - Tích hợp Firebase Phone Auth gửi mã SMS OTP 6 chữ số về SIM điện thoại; cơ chế Rate Limiting đếm ngược 60 giây.
+     - Tích hợp sẵn Whitelist Testing Numbers (số điện thoại thử nghiệm miễn phí) trên Firebase Console để demo 100% miễn phí không tốn SMS.
+  2. *Đăng nhập / Đăng ký qua Email & Mật khẩu (Email/Password Auth):*
+     - Tab "Email & Mật Khẩu": Người dùng nhập Email hợp lệ và Mật khẩu (tối thiểu 6 ký tự).
+     - Đăng ký mới: Sử dụng `FirebaseAuth.instance.createUserWithEmailAndPassword`, tự động khởi tạo hồ sơ người dùng trên Firestore (`users/{uid}`).
+     - Đăng nhập: Sử dụng `FirebaseAuth.instance.signInWithEmailAndPassword`, hỗ trợ lưu phiên làm việc an toàn.
+     - Cung cấp sẵn các Chip tài khoản mẫu phục vụ chấm thi đồ án: `khachhang@jetpost.vn`, `taixe@jetpost.vn`, `admin@jetpost.vn`.
+  3. *Quên Mật khẩu & Đặt lại Đa kênh (Forgot Password Flow):*
+     - Bấm "Quên mật khẩu" -> Chọn nhận mã OTP qua Email hoặc qua Số điện thoại đã liên kết.
+     - Xác thực mã OTP hợp lệ -> Cho phép đặt mật khẩu mới mà không làm gián đoạn tài khoản.
 
 #### Task 3.3 - Quy trình Định danh Điện tử eKYC cho Đối tác Tài xế
 * **Mô tả:** Thu thập thông tin phương tiện, chụp ảnh giấy tờ pháp lý để Admin thẩm định trước khi kích hoạt tài khoản chạy xe.
 * **Trường hợp sử dụng:** Người có xe máy muốn đăng ký tham gia mạng lưới tài xế đối tác.
 * **Luồng hoạt động:**
-  1. Chọn "Đăng ký làm Tài xế" -> Xác thực SĐT qua OTP thành công.
+  1. Chọn "Đăng ký làm Tài xế" -> Yêu cầu tài khoản bắt buộc phải có Số điện thoại xác thực chính chủ (nếu đăng ký bằng Email thì thực hiện liên kết SĐT trước).
   2. Điền thông tin cá nhân, loại xe, biển số xe máy.
   3. Tích hợp Camera chụp ảnh rõ nét: Căn cước công dân (CCCD 2 mặt) và Giấy phép lái xe (GPLX).
   4. Tải lên Cloudinary an toàn (phân loại vào folder `jetpost/drivers_ekyc`).
   5. Lưu thông tin hồ sơ vào collection `drivers` với trạng thái `PENDING_APPROVAL`.
   6. Màn hình app hiển thị thông báo: "Hồ sơ của bạn đang được xét duyệt, vui lòng chờ Admin thẩm định".
 
-#### Task 3.4 - Quản lý Hồ sơ Cá nhân & Bảo mật Tài khoản (Profile Management)
-* **Mô tả:** Cho phép người dùng xem, chỉnh sửa thông tin cá nhân và cập nhật ảnh đại diện.
-* **Trường hợp sử dụng:** Khách hàng hoặc tài xế muốn cập nhật thông tin cá nhân.
+#### Task 3.4 - Quản lý Hồ sơ Cá nhân, Liên kết Danh tính & Bảo mật Đổi SĐT (Profile & Account Linking)
+* **Mô tả:** Cho phép người dùng xem, chỉnh sửa thông tin cá nhân, cập nhật ảnh đại diện, liên kết thêm phương thức đăng nhập và quy trình đổi SĐT an toàn khi mất SIM.
+* **Trường hợp sử dụng:** Khách hàng hoặc tài xế muốn cập nhật thông tin cá nhân, liên kết Email vào tài khoản SĐT, hoặc đổi số điện thoại mới khi mất SIM cũ.
 * **Luồng hoạt động:**
-  1. Người dùng vào mục "Hồ sơ cá nhân".
-  2. Hiển thị thông tin: Họ tên, Số điện thoại, Email liên kết, Ảnh đại diện (Avatar).
-  3. Cho phép chỉnh sửa Tên, tải ảnh đại diện mới từ thư viện ảnh máy lên Cloudinary (phân loại vào folder `jetpost/avatars`).
-  4. Tính năng "Đổi số điện thoại": Yêu cầu nhập SĐT mới -> Gửi mã OTP xác minh SĐT mới thành công thì mới cho cập nhật dữ liệu trên Firestore.
+  1. Người dùng vào mục "Hồ sơ cá nhân": Hiển thị Họ tên, Số điện thoại, Email liên kết, Ảnh đại diện (Avatar).
+  2. Cho phép chỉnh sửa Tên, tải ảnh đại diện mới lên Cloudinary (`jetpost/avatars`).
+  3. *Tính năng Liên kết Phương thức Đăng nhập (Omni-channel Linking):*
+     - Nếu đăng ký bằng SĐT: Hiển thị nút "Liên kết Email & Mật khẩu" -> Nhập Email và mật khẩu -> Gửi mã OTP xác thực email chính chủ -> Hoàn tất liên kết.
+     - Nếu đăng ký bằng Email: Hiển thị nút "Liên kết Số điện thoại" -> Nhập SĐT -> Gửi SMS OTP xác thực SIM chính chủ -> Hoàn tất liên kết.
+  4. *Quy trình Đổi Số Điện Thoại An Toàn (Kịch bản Mất SIM / Mất Máy - Step-up Verification):*
+     - Bước 1 (Xác minh Danh tính Chủ sở hữu): Hệ thống cung cấp 2 phương thức nhận OTP:
+       + *Cách 1 (Vẫn còn SIM cũ):* Gửi mã OTP về SĐT cũ.
+       + *Cách 2 (Mất SIM / Mất máy):* Đăng nhập bằng Email/Mật khẩu -> Chọn "Gửi mã OTP xác nhận về Email liên kết".
+     - Bước 2 (Xác thực Số điện thoại Mới): Sau khi vượt qua Bước 1, người dùng nhập Số điện thoại mới -> Hệ thống gửi mã OTP về SĐT mới -> Nhập OTP chính xác -> Cập nhật trường `phone` trên Firestore thành công!
+     - *Trường hợp chưa liên kết Email và mất SIM:* Người dùng cần liên hệ Quản trị viên (Admin) đối soát hồ sơ hoặc làm lại SIM tại nhà mạng viễn thông.
 
 #### Task 3.5 - Quản lý Phân quyền theo Vai trò (Role-Based Access Control - RBAC Guard) & Lưu phiên Auto-login
 * **Mô tả:** Kiểm soát và phân định quyền truy cập các màn hình ứng dụng dựa vào thuộc tính vai trò của tài khoản, bảo vệ an ninh và duy trì trạng thái đăng nhập.
@@ -492,6 +506,36 @@ lib/
    - *Cơ chế Ký số Bảo mật (Signed Upload):* Ứng dụng tự động sinh chữ ký bảo mật HMAC-SHA1 từ `apiKey` và `apiSecret` để đẩy ảnh trực tiếp lên đúng thư mục mong muốn mà không cần tạo upload preset thủ công.
    - *Tối ưu hóa Băng thông CDN tự động:* Tận dụng sức mạnh Cloudinary CDN để tự động nén ảnh (`q_auto`), chuyển sang định dạng WebP siêu nhẹ (`f_auto`) và resize ảnh trực tiếp qua URL, giúp ứng dụng di động tải ảnh siêu tốc và không tốn pin thiết bị khi nén ảnh cục bộ.
 
+6. **Chiến lược Xác thực Email & Công nghệ Sinh Mã OTP 6 Số Phía Máy chủ (Server-Side Cloudflare Worker + Brevo REST API - Zero-Cost & Enterprise Security):**
+   - *Bản chất Kiến trúc An ninh (Security by Design):* **TUYỆT ĐỐI KHÔNG sinh mã OTP trên máy người dùng (Client App)** để triệt tiêu hoàn toàn rủi ro dịch ngược mã nguồn (Reverse Engineering) file APK hoặc trích xuất bộ nhớ RAM để bypass OTP. Mã OTP 6 chữ số BẮT BUỘC phải được cấp phát và kiểm soát tập trung phía máy chủ (Server-Side).
+   - *Mô hình Không Máy Chủ Miễn phí 100% (Zero-Cost Serverless Architecture):* Do gói Firebase Spark không hỗ trợ Cloud Functions, hệ thống sử dụng **Cloudflare Workers (Edge Serverless Computing)** kết hợp **Brevo Transactional REST API**:
+     * **Nền tảng Cloudflare Workers:** Cung cấp **100.000 requests/ngày MIỄN PHÍ VĨNH VIỄN, 100% KHÔNG CẦN THẺ TÍN DỤNG**. Đóng vai trò là cổng API bảo mật trung gian (Secure Gateway).
+     * **Nền tảng Gửi Email Brevo:** Cung cấp **300 emails/ngày MIỄN PHÍ VĨNH VIỄN, 100% KHÔNG CẦN THẺ TÍN DỤNG**.
+     * **Luồng Vận hành Chuẩn mực:**
+       1. App Flutter trên điện thoại chỉ gửi yêu cầu: `{ "email": "user@gmail.com", "type": "REGISTER" | "RESET_PASSWORD" | "CHANGE_PHONE" }` lên Endpoint của Cloudflare Worker (`https://jetpost-otp.workers.dev/api/send-otp`).
+       2. **Máy chủ Cloudflare Worker tự sinh ngẫu nhiên mã OTP 6 số** bằng thuật toán mã hóa an toàn (`crypto.getRandomValues`).
+       3. Máy chủ Worker lưu mã băm (`codeHash`), loại xác thực, số lần thử (`attempts: 0`) và thời hạn 5 phút (`expiresAt`) vào Cloud Firestore collection `email_otps`.
+       4. Máy chủ Worker gọi Brevo REST API gửi email HTML mang thương hiệu JetPost (`#00A86B`) với **duy nhất mã OTP 6 số to rõ, hoàn toàn KHÔNG CÓ bất kỳ đường link nào**.
+       5. App người dùng hoàn toàn không biết mã là gì cho đến khi người dùng mở hòm thư đọc mã và gõ vào cụm 6 ô vuông `OtpPinInput` ngay trên ứng dụng di động.
+       6. Khi xác thực: App gửi mã người dùng nhập lên để đối chiếu. Hợp lệ thì cho phép đặt mật khẩu mới, liên kết email hoặc đổi SĐT ngay trên app.
+   - *Cam kết Đồ án:* 100% Miễn phí, 100% In-App (không link web), đạt chuẩn an ninh phòng thủ cao nhất trước mọi câu hỏi phản biện của Hội đồng chấm thi.
+
+7. **Bảng Rà soát Toàn diện Hạn ngạch & Rủi ro Trả phí/Gói Blaze Toàn bộ Dự án JetPost:**
+
+| Phân hệ / Dịch vụ | Công nghệ sử dụng | Chính sách Nhà cung cấp | Rủi ro Gói Blaze / Trả phí | Biện pháp Kiểm soát & Giải pháp Miễn phí |
+| :--- | :--- | :--- | :---: | :--- |
+| **Xác thực Số điện thoại** | Firebase Phone Auth (SMS) | Spark chặn SMS thật với lỗi `17499 BILLING_NOT_ENABLED` | **CÓ** (nếu gửi SMS thật) | Sử dụng **Whitelist Testing Numbers** + Bổ sung **Email & Password Authentication**. 100% Miễn phí! |
+| **Xác thực Email & Mật khẩu** | Firebase Email/Password Auth | Hoàn toàn miễn phí trên Spark | **KHÔNG** | Sử dụng Firebase Auth Native, không giới hạn người dùng. |
+| **Gửi OTP qua Email** | Brevo API / Gmail SMTP | 300 - 500 emails/ngày miễn phí | **KHÔNG** | Gọi REST API từ Flutter Client, không dùng Cloud Functions. |
+| **Lưu trữ CSDL NoSQL** | Cloud Firestore | 50.000 đọc / 20.000 ghi / ngày | **KHÔNG** | Áp dụng `distanceFilter: 15m` GPS, Denormalization có kiểm soát, sort in-memory. |
+| **Lưu trữ Ảnh CCCD, GPLX, PoD** | Cloudinary Free Tier | 25GB băng thông & lưu trữ / tháng | **KHÔNG** | Thay thế 100% Firebase Storage; Signed upload client-side bằng HMAC-SHA1. |
+| **Bản đồ nền** | OpenStreetMap (flutter_map) | Mã nguồn mở miễn phí | **KHÔNG** | Không cần API key, không yêu cầu thẻ tín dụng. |
+| **Tìm đường & Vẽ Polyline** | OpenRouteService API | 2.000 requests/ngày | **KHÔNG** | Chỉ gọi khi chốt điểm đón & trả; cache tuyến đường. |
+| **Dẫn đường Giọng nói Tài xế** | Intent `google.navigation:` | Tích hợp sẵn trong HĐH Android | **KHÔNG** | Dùng `url_launcher` mở app Google Maps máy tài xế; không tốn Google Maps SDK. |
+| **Định vị GPS Chạy ngầm** | `geolocator` Foreground Service | Phần cứng thiết bị di động | **KHÔNG** | Thu thập GPS trực tiếp từ cảm biến phần cứng của máy. |
+| **Thẩm định eKYC Tài xế** | Duyệt thủ công (Human-in-the-loop) | Quản trị viên duyệt trên Admin Portal | **KHÔNG** | Không tích hợp API OCR AI bên thứ 3 tính phí (FPT.AI/VNPT eKYC). |
+| **Thông báo Toàn hệ thống** | Firestore Stream `system_notifications` | In-app WebSocket Stream | **KHÔNG** | Không cần Cloud Functions hay SMS Brandname viễn thông. |
+
 ---
 
 ## 8. Đánh giá Khả thi & Nhận xét của Chuyên gia Hệ thống (Architectural Review & Risk Management)
@@ -532,19 +576,19 @@ lib/
 
 ---
 
-### 9.2. Phân biệt 2 Loại Mã OTP Riêng biệt trong Hệ thống JetPost
+### 9.2. Phân biệt Các Loại Mã OTP trong Hệ thống JetPost
 
-Hệ thống JetPost vận hành 2 luồng mã OTP với mục đích, nguồn gốc và vòng đời hoàn toàn khác nhau:
+Hệ thống JetPost vận hành các luồng mã OTP với mục đích, nguồn gốc và vòng đời hoàn toàn minh bạch:
 
 | Tiêu chí | 1. Mã OTP Xác thực Tài khoản (Authentication OTP) | 2. Mã OTP Bàn giao Bưu phẩm (Delivery Handover PoD OTP) |
 | :--- | :--- | :--- |
-| **Mục đích** | Đăng ký, đăng nhập tài khoản và xác minh số điện thoại chính chủ để phòng chống nick ảo / quấy phá. | Xác nhận bàn giao bưu kiện an toàn giữa Tài xế và Người nhận (Proof of Delivery - PoD). |
+| **Mục đích** | Đăng ký, đăng nhập, liên kết tài khoản, quên mật khẩu và đổi SĐT khi mất SIM (Step-up Verification). | Xác nhận bàn giao bưu kiện an toàn giữa Tài xế và Người nhận (Proof of Delivery - PoD). |
 | **Độ dài mã** | **6 chữ số** ngẫu nhiên (Ví dụ: `582914`). | **4 chữ số** ngẫu nhiên bảo mật (Ví dụ: `8392`). |
-| **Nguồn gốc sinh mã** | **Máy chủ Firebase Authentication Server** tự động sinh ngẫu nhiên trên Cloud. | **Logic Hệ thống / Backend** tự động sinh ngẫu nhiên bằng thuật toán mã hóa ngay khi đơn hàng chuyển sang trạng thái `IN_TRANSIT` (Đang giao). |
-| **Kênh chuyển phát mã** | Đẩy qua mạng viễn thông (Telco SMS Gateway) gửi tin nhắn SMS trực tiếp về khay SIM của điện thoại người dùng. | Hiển thị trực tiếp và duy nhất trên màn hình ứng dụng của **Người nhận** (Tab "Đơn nhận của tôi" hoặc link tracking web). |
-| **Ai có quyền xem mã?** | Duy nhất chủ SIM điện thoại nhận được tin nhắn SMS. Admin và hệ thống lưu trữ dạng mã hóa một chiều, không ai đọc được. | **Duy nhất Người nhận** mới thấy được mã này. Tài xế KHÔNG THỂ nhìn thấy mã trên app tài xế để chống tình trạng tài xế tự ý bấm hoàn thành khi chưa giao. |
-| **Quy trình xác thực** | Người dùng nhập 6 số -> Firebase Auth Client SDK gửi lên Firebase Server đối chiếu -> Cấp JWT Token phiên làm việc. | Khi tài xế giao hàng tới tận nơi: Người nhận đọc 4 số cho tài xế -> Tài xế gõ 4 số vào app -> Hệ thống so khớp với mã của đơn -> Hợp lệ thì mới cho phép bấm "Giao thành công". |
-| **Vai trò thực sự của Admin** | Admin hoàn toàn không biết mã này, chỉ thấy nhãn `phone_verified: true` trên danh sách người dùng. | Admin **không sinh mã**, nhưng có quyền tra cứu mã trong màn hình "Quản lý Khiếu nại / Tranh chấp (Task 4.5)" khi xảy ra sự cố người nhận khiếu nại chưa nhận được hàng. |
+| **Nguồn gốc sinh mã** | **Firebase Auth Server** (đối với SMS) HOẶC **Hạ tầng Email Gateway bảo mật** (Brevo REST API / Google SMTP). | **Logic Hệ thống / Backend** tự động sinh ngẫu nhiên bằng thuật toán mã hóa ngay khi đơn hàng chuyển sang trạng thái `IN_TRANSIT` (Đang giao). |
+| **Kênh chuyển phát mã** | - **Kênh 1:** Đẩy qua mạng viễn thông (SMS Gateway) về SIM điện thoại người dùng.<br>- **Kênh 2:** Gửi email HTML chứa mã OTP 6 số về hộp thư chính chủ (100% miễn phí). | Hiển thị trực tiếp và duy nhất trên màn hình ứng dụng của **Người nhận** (Tab "Đơn nhận của tôi" hoặc link tracking web). |
+| **Ai có quyền xem mã?** | Duy nhất chủ SIM hoặc chủ sở hữu hộp thư Email nhận được. Hệ thống kiểm tra thời hạn (5 phút), tự động hủy sau khi sử dụng. | **Duy nhất Người nhận** mới thấy được mã này. Tài xế KHÔNG THỂ nhìn thấy mã trên app tài xế để chống tình trạng tài xế tự ý bấm hoàn thành khi chưa giao. |
+| **Quy trình xác thực** | Người dùng nhập 6 số -> Hệ thống so khớp mã băm và thời hạn hiệu lực -> Cấp token phiên / hoàn tất thao tác. | Khi tài xế giao hàng tới tận nơi: Người nhận đọc 4 số cho tài xế -> Tài xế gõ 4 số vào app -> Hệ thống so khớp với mã của đơn -> Hợp lệ thì mới cho phép bấm "Giao thành công". |
+| **Vai trò của Admin** | Admin hoàn toàn không biết mã này, chỉ thấy nhãn phương thức xác thực trên danh sách người dùng. | Admin **không sinh mã**, nhưng có quyền tra cứu mã trong màn hình "Quản lý Khiếu nại / Tranh chấp (Task 4.5)" khi xảy ra sự cố người nhận khiếu nại chưa nhận được hàng. |
 
 ---
 
@@ -610,7 +654,7 @@ Hệ thống JetPost vận hành 2 luồng mã OTP với mục đích, nguồn g
 ### 10.1. Danh mục 9 Thực thể CSDL (7 Root Collections & 2 Sub-collections)
 1. **`users` (Root Collection - Người dùng Toàn hệ thống):**
    - Khóa chính: `id` (Firebase Auth UID).
-   - Các trường: `phone` (String, E.164), `fullName` (String), `avatarUrl` (String), `role` (`customer` | `driver` | `admin`), `isBanned` (Boolean), `createdAt` (Timestamp), `updatedAt` (Timestamp).
+   - Các trường: `phone` (String, E.164, Nullable nếu chỉ đăng ký Email), `email` (String, Nullable nếu chỉ đăng ký SĐT), `fullName` (String), `avatarUrl` (String), `role` (`customer` | `driver` | `admin`), `authProviders` (Array of Strings: `['phone']`, `['email']`, `['phone', 'email']`), `isEmailVerified` (Boolean), `isBanned` (Boolean), `createdAt` (Timestamp), `updatedAt` (Timestamp).
 
 2. **`saved_addresses` (Sub-collection lồng trong `users/{userId}/saved_addresses`):**
    - Khóa chính: `id` (Auto-ID), khóa ngoại `userId` (String liên kết `users.id`).

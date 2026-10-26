@@ -1,4 +1,14 @@
 import 'package:flutter/material.dart';
+import '../modules/user/screens/app_settings_screen.dart';
+import '../modules/user/screens/change_phone_screen.dart';
+import '../modules/user/screens/direct_chat_screen.dart';
+import '../modules/user/screens/driver_ekyc_screen.dart';
+import '../modules/user/screens/kyc_pending_screen.dart';
+import '../modules/user/screens/link_email_screen.dart';
+import '../modules/user/screens/messages_inbox_screen.dart';
+import '../modules/user/screens/phone_auth_screen.dart';
+import '../modules/user/screens/user_profile_screen.dart';
+import '../modules/user/screens/welcome_gate_screen.dart';
 
 /// Danh mục tên các đường dẫn (Route Names) toàn hệ thống JetPost
 /// Phục vụ cơ chế điều phối Cổng vào (Welcome Gate) và phân quyền Role Guard
@@ -25,10 +35,13 @@ class AppRoutes {
   // [Phân hệ 3 - Thành viên 3] User, Định danh & Chat
   static const String phoneAuth = '/user/phone-auth';
   static const String driverKyc = '/user/driver-ekyc';
+  static const String kycPending = '/user/kyc-pending';
   static const String userProfile = '/user/profile';
   static const String appSettings = '/user/settings';
   static const String messagesInbox = '/user/messages-inbox';
   static const String directChat = '/user/direct-chat';
+  static const String changePhone = '/user/change-phone';
+  static const String linkEmail = '/user/link-email';
 
   // [Phân hệ 4 - Thành viên 4] Quản trị Điều hành & Radar
   static const String adminDashboard = '/admin/dashboard';
@@ -37,6 +50,48 @@ class AppRoutes {
   static const String adminUsersManagement = '/admin/users-management';
   static const String adminPricingConfig = '/admin/pricing-config';
   static const String adminAnalytics = '/admin/analytics';
+
+  /// Đăng ký danh sách các routes cố định của ứng dụng
+  static Map<String, WidgetBuilder> get routes => {
+        welcomeGate: (context) => const WelcomeGateScreen(),
+        phoneAuth: (context) => const PhoneAuthScreen(),
+        driverKyc: (context) => const DriverEkycScreen(),
+        kycPending: (context) => const KycPendingScreen(),
+        userProfile: (context) => const UserProfileScreen(),
+        appSettings: (context) => const AppSettingsScreen(),
+        messagesInbox: (context) => const MessagesInboxScreen(),
+      };
+
+  /// Bộ xử lý chuyển hướng động (onGenerateRoute)
+  static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
+    if (settings.name == directChat) {
+      final args = settings.arguments as Map<String, dynamic>? ?? {};
+      return MaterialPageRoute(
+        builder: (_) => DirectChatScreen(
+          chatId: args['chatId'] as String? ?? '',
+          targetUserId: args['targetUserId'] as String? ?? '',
+          targetName: args['targetName'] as String? ?? 'Người dùng',
+          targetAvatar: args['targetAvatar'] as String?,
+          targetPhone: args['targetPhone'] as String?,
+        ),
+      );
+    }
+    if (settings.name == changePhone) {
+      final args = settings.arguments as Map<String, dynamic>? ?? {};
+      return MaterialPageRoute(
+        builder: (_) => ChangePhoneScreen(
+          currentPhone: args['currentPhone'] as String? ?? '',
+          linkedEmail: args['linkedEmail'] as String?,
+        ),
+      );
+    }
+    if (settings.name == linkEmail) {
+      return MaterialPageRoute(
+        builder: (_) => const LinkEmailScreen(),
+      );
+    }
+    return null;
+  }
 
   /// Bộ xử lý chuyển hướng dự phòng nếu route không tồn tại
   static Route<dynamic> onUnknownRoute(RouteSettings settings) {

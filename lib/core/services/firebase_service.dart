@@ -10,6 +10,9 @@ class FirebaseService {
   static final FirebaseFirestore firestore = FirebaseFirestore.instance;
   static final FirebaseStorage storage = FirebaseStorage.instance;
 
+  /// Lấy FirebaseAuth User của phiên đăng nhập hiện tại
+  static User? get currentUser => auth.currentUser;
+
   /// Lấy UID người dùng đang đăng nhập hiện tại
   static String? get currentUserId => auth.currentUser?.uid;
 
