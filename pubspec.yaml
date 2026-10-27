@@ -39,8 +39,12 @@ dependencies:
   firebase_auth: ^7.0.0
   firebase_storage: ^14.0.0
   http: ^1.6.0
+  crypto: ^3.0.6
   latlong2: ^0.10.1
   intl: ^0.20.3
+  shared_preferences: ^2.5.2
+  image_picker: ^1.1.2
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

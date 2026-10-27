@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_enums.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/cloudinary_service.dart';
+import '../../../core/utils/app_logger.dart';
+import '../../../models/user_model.dart';
+import '../../../routes/app_routes.dart';
+import '../services/user_service.dart';
+import 'kyc_pending_screen.dart';
+import 'phone_auth_screen.dart';
 
 /// Màn hình Cổng vào Hợp nhất (UI Entry Point Gate) & Demo Role Switcher
 /// Cho phép điều phối vào 4 phân hệ độc lập và kiểm thử trực tiếp trước Hội đồng
@@ -12,12 +20,159 @@ class WelcomeGateScreen extends StatefulWidget {
 }
 
 class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
+  UserModel? _currentUser;
+  bool _isLoadingUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    AppLogger.navigation('AppStartup', 'WelcomeGateScreen');
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final user = await UserService.instance.checkAutoLogin();
+    if (!mounted) return;
+    setState(() {
+      _currentUser = user;
+      _isLoadingUser = false;
+    });
+  }
+
+  void _navigateToRole(String roleRoute, UserRole requiredRole) {
+    AppLogger.userAction('WelcomeGate', 'Chạm chọn Phân hệ', {
+      'role': requiredRole.toFirestore(),
+      'route': roleRoute,
+      'isLoggedIn': _currentUser != null,
+    });
+
+    if (_currentUser == null) {
+      AppLogger.navigation('WelcomeGate', 'PhoneAuthScreen', {'targetRole': requiredRole.name});
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PhoneAuthScreen(targetRole: requiredRole),
+        ),
+      ).then((_) => _checkSession());
+      return;
+    }
+
+    if (requiredRole == UserRole.driver) {
+      _handleDriverEntry();
+      return;
+    }
+
+    if (requiredRole == UserRole.admin && _currentUser!.role != UserRole.admin) {
+      AppLogger.auth('Từ chối truy cập Cổng Admin: Người dùng không có quyền admin', {
+        'currentRole': _currentUser!.role.toFirestore(),
+      });
+      _showNoticeDialog(
+        title: 'Quyền Quản Trị Viên',
+        message: 'Tài khoản của bạn hiện là ${_currentUser!.role.toFirestore()}. Bạn cần đăng nhập bằng tài khoản Admin để truy cập.',
+      );
+      return;
+    }
+
+    AppLogger.navigation('WelcomeGate', roleRoute);
+    Navigator.pushNamed(context, roleRoute);
+  }
+
+  Future<void> _handleDriverEntry() async {
+    final driver = await UserService.instance.getDriverProfile(_currentUser!.id);
+
+    if (!mounted) return;
+
+    if (driver == null) {
+      // Chưa đăng ký eKYC
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Đăng Ký Đối Tác Tài Xế'),
+          content: const Text(
+            'Bạn chưa hoàn thành hồ sơ định danh điện tử eKYC. Bạn có muốn nộp hồ sơ bằng lái và CCCD ngay bây giờ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Để sau'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, AppRoutes.driverKyc);
+              },
+              child: const Text('Đăng ký ngay'),
+            ),
+          ],
+        ),
+      );
+    } else if (driver.status == DriverApprovalStatus.pendingApproval) {
+      Navigator.pushNamed(context, AppRoutes.kycPending);
+    } else if (driver.status == DriverApprovalStatus.banned) {
+      _showNoticeDialog(
+        title: 'Tài Khoản Bị Khóa',
+        message: 'Tài khoản đối tác của bạn đã bị tạm khóa do vi phạm quy chế hoạt động.',
+      );
+    } else {
+      Navigator.pushNamed(context, AppRoutes.driverDashboard);
+    }
+  }
+
+  void _showNoticeDialog({required String title, required String message}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đã hiểu'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleTapDriverEkyc() async {
+    if (_currentUser == null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const PhoneAuthScreen(targetRole: UserRole.driver),
+        ),
+      ).then((_) => _checkSession());
+      return;
+    }
+    // Kiểm tra trạng thái hồ sơ tài xế hiện có
+    final driver = await UserService.instance.getDriverProfile(_currentUser!.id);
+    if (!mounted) return;
+    if (driver != null) {
+      if (driver.status == DriverApprovalStatus.pendingApproval) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => KycPendingScreen(plateNumber: driver.plateNumber),
+          ),
+        ).then((_) => _checkSession());
+        return;
+      } else if (driver.status == DriverApprovalStatus.active) {
+        Navigator.pushNamed(context, AppRoutes.driverDashboard).then((_) => _checkSession());
+        return;
+      }
+    }
+    Navigator.pushNamed(context, AppRoutes.driverKyc).then((_) => _checkSession());
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -36,6 +191,72 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
             ),
           ],
         ),
+        actions: [
+          // Nút Hộp thư Chat P2P
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: 'Tin nhắn P2P',
+            onPressed: () {
+              AppLogger.userAction('WelcomeGate', 'Chạm icon Tin nhắn P2P', {'isLoggedIn': _currentUser != null});
+              if (_currentUser == null) {
+                Navigator.pushNamed(context, AppRoutes.phoneAuth).then((_) => _checkSession());
+              } else {
+                Navigator.pushNamed(context, AppRoutes.messagesInbox);
+              }
+            },
+          ),
+
+          // Nút Cài đặt
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Cài đặt',
+            onPressed: () {
+              AppLogger.userAction('WelcomeGate', 'Chạm icon Cài đặt');
+              Navigator.pushNamed(context, AppRoutes.appSettings);
+            },
+          ),
+
+          // Avatar / Nút Đăng nhập
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _isLoadingUser
+                ? const SizedBox.shrink()
+                : InkWell(
+                    onTap: () {
+                      AppLogger.userAction('WelcomeGate', 'Chạm Avatar / Tài khoản', {'isLoggedIn': _currentUser != null});
+                      if (_currentUser == null) {
+                        Navigator.pushNamed(context, AppRoutes.phoneAuth).then((_) => _checkSession());
+                      } else {
+                        Navigator.pushNamed(context, AppRoutes.userProfile).then((_) => _checkSession());
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: CircleAvatar(
+                      radius: 17,
+                      backgroundColor: AppColors.primary.withAlpha(40),
+                      backgroundImage: _currentUser?.avatarUrl != null && _currentUser!.avatarUrl!.isNotEmpty
+                          ? NetworkImage(
+                              CloudinaryService.instance.getOptimizedUrl(
+                                _currentUser!.avatarUrl!,
+                                width: 80,
+                                height: 80,
+                              ),
+                            )
+                          : null,
+                      child: _currentUser == null
+                          ? const Icon(Icons.person, size: 18, color: AppColors.primary)
+                          : (_currentUser!.avatarUrl == null || _currentUser!.avatarUrl!.isEmpty)
+                              ? Text(
+                                  _currentUser!.fullName.isNotEmpty
+                                      ? _currentUser!.fullName[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                )
+                              : null,
+                    ),
+                  ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -70,14 +291,24 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                         color: Colors.white.withAlpha(50),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.cloud_done, color: Colors.white, size: 14),
-                          SizedBox(width: 6),
-                          Text(
-                            'Firebase Cloud Connected',
-                            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          const Icon(Icons.cloud_done, color: Colors.white, size: 14),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _currentUser != null
+                                  ? 'Đã đăng nhập: ${_currentUser!.fullName}'
+                                  : 'Firebase & Cloudinary Sẵn Sàng',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -123,7 +354,7 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                 color: const Color(0xFF00A86B),
                 icon: Icons.person_pin_circle,
                 onTap: () {
-                  _showModuleNotice(context, 'Phân hệ 1: Khách hàng', 'Thành viên 1 sẽ lập trình giao diện đặt xe tại: lib/modules/customer/');
+                  _navigateToRole(AppRoutes.customerHome, UserRole.customer);
                 },
               ),
 
@@ -138,22 +369,26 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                 color: const Color(0xFFFF6B00),
                 icon: Icons.two_wheeler,
                 onTap: () {
-                  _showModuleNotice(context, 'Phân hệ 2: Đối tác Tài xế', 'Nguyễn Văn Hải sẽ lập trình giao diện chạy xe tại: lib/modules/driver/');
+                  _navigateToRole(AppRoutes.driverDashboard, UserRole.driver);
                 },
               ),
 
               const SizedBox(height: 14),
 
-              // 3. Cổng User & eKYC (Module 3)
+              // 3. Cổng Hồ sơ & Bảo mật (Module 3)
               _buildRoleCard(
                 context,
-                title: 'Tài Khoản & Định Danh eKYC',
-                subtitle: 'Xác thực SMS OTP, nộp CCCD/bằng lái & Chat P2P trực tiếp',
+                title: 'Hồ Sơ & Bảo Mật Cá Nhân',
+                subtitle: 'Xem thông tin, đổi ảnh đại diện, đổi SĐT & liên kết email',
                 badgeText: 'Thành viên 3',
                 color: const Color(0xFF7B1FA2),
-                icon: Icons.verified_user,
+                icon: Icons.manage_accounts_outlined,
                 onTap: () {
-                  _showModuleNotice(context, 'Phân hệ 3: User & Định danh', 'Thành viên 3 sẽ lập trình xác thực OTP tại: lib/modules/user/');
+                  if (_currentUser == null) {
+                    Navigator.pushNamed(context, AppRoutes.phoneAuth).then((_) => _checkSession());
+                  } else {
+                    Navigator.pushNamed(context, AppRoutes.userProfile).then((_) => _checkSession());
+                  }
                 },
               ),
 
@@ -168,11 +403,51 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                 color: const Color(0xFF1E88E5),
                 icon: Icons.admin_panel_settings,
                 onTap: () {
-                  _showModuleNotice(context, 'Phân hệ 4: Quản trị Admin', 'Thành viên 4 sẽ lập trình radar điều hành tại: lib/modules/admin/');
+                  _navigateToRole(AppRoutes.adminDashboard, UserRole.admin);
                 },
               ),
 
               const SizedBox(height: 24),
+
+              // Nút Đăng ký eKYC Tài Xế Nổi Bật (Nếu chưa đăng ký)
+              if (_currentUser == null || _currentUser!.role != UserRole.driver) ...[
+                InkWell(
+                  onTap: _handleTapDriverEkyc,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceDark : const Color(0xFFFFF8E1),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFFB300)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.badge_outlined, color: Color(0xFFE65100), size: 24),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Đăng Ký Gia Nhập Đối Tác Tài Xế (eKYC)',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Chụp ảnh CCCD và Giấy phép lái xe gửi Admin xét duyệt',
+                                style: TextStyle(fontSize: 11.5, color: Color(0xFFE65100)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward, size: 16, color: Color(0xFFE65100)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
 
               // Trạng thái hệ thống phía dưới
               Container(
@@ -190,7 +465,7 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Hạ tầng 9 thực thể CSDL & Core Services đã sẵn sàng hoạt động!',
+                        'Phân hệ User: Phone Auth, eKYC Cloudinary & Chat P2P đã sẵn sàng!',
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
@@ -200,6 +475,7 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                   ],
                 ),
               ),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
             ],
           ),
         ),
@@ -299,43 +575,6 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  void _showModuleNotice(BuildContext context, String moduleName, String detail) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                moduleName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                detail,
-                style: const TextStyle(fontSize: 14, height: 1.5),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Đã hiểu'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

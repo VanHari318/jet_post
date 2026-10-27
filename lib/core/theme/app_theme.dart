@@ -1,10 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 
 /// Quản lý Giao diện Sáng (Light) và Tối (Dark) toàn ứng dụng JetPost
 /// Đảm bảo tính nhất quán và tối ưu hiển thị cho tài xế lái xe ban đêm.
 class AppTheme {
   AppTheme._();
+
+  static const String prefThemeKey = 'pref_theme_mode';
+
+  /// Bộ phát tín hiệu chuyển đổi Theme toàn ứng dụng (Reactive State)
+  static final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
+
+  /// Khởi tạo và đồng bộ Theme đã lưu từ SharedPreferences khi khởi động app
+  static Future<void> init() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedTheme = prefs.getString(prefThemeKey);
+      if (savedTheme == 'light') {
+        themeModeNotifier.value = ThemeMode.light;
+      } else if (savedTheme == 'dark') {
+        themeModeNotifier.value = ThemeMode.dark;
+      } else {
+        themeModeNotifier.value = ThemeMode.system;
+      }
+    } catch (_) {}
+  }
+
+  /// Thay đổi Theme và lưu bền vững vào SharedPreferences
+  static Future<void> setThemeMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(prefThemeKey, mode);
+
+    if (mode == 'light') {
+      themeModeNotifier.value = ThemeMode.light;
+    } else if (mode == 'dark') {
+      themeModeNotifier.value = ThemeMode.dark;
+    } else {
+      themeModeNotifier.value = ThemeMode.system;
+    }
+  }
 
   static ThemeData get lightTheme {
     return ThemeData(
