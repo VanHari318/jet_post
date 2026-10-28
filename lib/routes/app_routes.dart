@@ -9,6 +9,11 @@ import '../modules/user/screens/messages_inbox_screen.dart';
 import '../modules/user/screens/phone_auth_screen.dart';
 import '../modules/user/screens/user_profile_screen.dart';
 import '../modules/user/screens/welcome_gate_screen.dart';
+import '../modules/driver/screens/driver_dashboard_screen.dart';
+import '../modules/driver/screens/driver_trip_screen.dart';
+import '../modules/driver/screens/driver_income_screen.dart';
+
+
 
 /// Danh mục tên các đường dẫn (Route Names) toàn hệ thống JetPost
 /// Phục vụ cơ chế điều phối Cổng vào (Welcome Gate) và phân quyền Role Guard
@@ -60,6 +65,9 @@ class AppRoutes {
         userProfile: (context) => const UserProfileScreen(),
         appSettings: (context) => const AppSettingsScreen(),
         messagesInbox: (context) => const MessagesInboxScreen(),
+        driverDashboard: (context) => const DriverDashboardScreen(),
+        driverTrip: (context) => const DriverTripScreen(),
+        driverIncome: (context) => const DriverIncomeScreen(),
       };
 
   /// Bộ xử lý chuyển hướng động (onGenerateRoute)
