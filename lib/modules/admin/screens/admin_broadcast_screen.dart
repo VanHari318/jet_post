@@ -40,6 +40,20 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen>
     super.dispose();
   }
 
+  void _applyTemplate({
+    required String title,
+    required String body,
+    required String targetGroup,
+    required String priority,
+  }) {
+    setState(() {
+      _titleCtrl.text = title;
+      _bodyCtrl.text = body;
+      _targetGroup = targetGroup;
+      _priority = priority;
+    });
+  }
+
   Future<void> _broadcast() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isBroadcasting = true);
@@ -74,6 +88,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen>
       // Chuyển sang tab lịch sử
       _tabCtrl.animateTo(1);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isBroadcasting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -128,14 +143,60 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen>
                         Expanded(
                           child: Text(
                             'Thông báo sẽ xuất hiện tức thì trên app của tất cả người dùng mục tiêu.',
-                            style: TextStyle(
-                                fontSize: 12, color: AppColors.info),
+                            style:
+                                TextStyle(fontSize: 12, color: AppColors.info),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
+
+                  // Mẫu thông báo nhanh theo KeHoach.md Task 4.8
+                  const Text(
+                    'Mẫu thông báo nhanh (1 chạm)',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.thunderstorm_outlined,
+                              size: 16, color: AppColors.warning),
+                          label: const Text('Cảnh báo mưa ngập',
+                              style: TextStyle(fontSize: 12)),
+                          onPressed: () => _applyTemplate(
+                            title: 'Cảnh báo mưa to ngập lụt khu vực Đống Đa',
+                            body:
+                                'Đề nghị đối tác tài xế lái xe an toàn, bật đèn cảnh báo và bọc nilon bảo quản bưu kiện cẩn thận.',
+                            targetGroup: 'DRIVERS',
+                            priority: 'URGENT',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ActionChip(
+                          avatar: const Icon(Icons.local_offer_outlined,
+                              size: 16, color: AppColors.primary),
+                          label: const Text('Ưu đãi cước phí',
+                              style: TextStyle(fontSize: 12)),
+                          onPressed: () => _applyTemplate(
+                            title: 'Ưu đãi 20% cước Giao hàng Nhanh JetPost',
+                            body:
+                                'Đặt xe ôm và gửi hàng siêu tốc trên JetPost ngay hôm nay để nhận ưu đãi giảm giá trực tiếp!',
+                            targetGroup: 'CUSTOMERS',
+                            priority: 'NORMAL',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
                   // Tiêu đề
                   const Text(
@@ -196,24 +257,21 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen>
                         icon: Icons.public,
                         color: AppColors.accent,
                         isSelected: _targetGroup == 'ALL',
-                        onTap: () =>
-                            setState(() => _targetGroup = 'ALL'),
+                        onTap: () => setState(() => _targetGroup = 'ALL'),
                       ),
                       BroadcastTargetChip(
                         label: 'Chỉ Tài xế',
                         icon: Icons.motorcycle,
                         color: AppColors.primary,
                         isSelected: _targetGroup == 'DRIVERS',
-                        onTap: () =>
-                            setState(() => _targetGroup = 'DRIVERS'),
+                        onTap: () => setState(() => _targetGroup = 'DRIVERS'),
                       ),
                       BroadcastTargetChip(
                         label: 'Chỉ Khách hàng',
                         icon: Icons.person,
                         color: AppColors.secondary,
                         isSelected: _targetGroup == 'CUSTOMERS',
-                        onTap: () =>
-                            setState(() => _targetGroup = 'CUSTOMERS'),
+                        onTap: () => setState(() => _targetGroup = 'CUSTOMERS'),
                       ),
                     ],
                   ),
@@ -321,8 +379,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen>
                       SizedBox(height: 12),
                       Text(
                         'Chưa có thông báo nào được phát',
-                        style: TextStyle(
-                            color: AppColors.textSecondaryLight),
+                        style: TextStyle(color: AppColors.textSecondaryLight),
                       ),
                     ],
                   ),
@@ -374,7 +431,9 @@ class _PriorityRadio extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.12) : Colors.transparent,
+            color: isSelected
+                ? color.withValues(alpha: 0.12)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected ? color : AppColors.borderLight,
@@ -433,11 +492,22 @@ class _NotificationPreview extends StatefulWidget {
 }
 
 class _NotificationPreviewState extends State<_NotificationPreview> {
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
-    widget.titleCtrl.addListener(() => setState(() {}));
-    widget.bodyCtrl.addListener(() => setState(() {}));
+    widget.titleCtrl.addListener(_onTextChanged);
+    widget.bodyCtrl.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.titleCtrl.removeListener(_onTextChanged);
+    widget.bodyCtrl.removeListener(_onTextChanged);
+    super.dispose();
   }
 
   @override
@@ -501,8 +571,7 @@ class _NotificationPreviewState extends State<_NotificationPreview> {
                     const SizedBox(height: 6),
                     const Text(
                       'Vừa xong • JetPost',
-                      style: TextStyle(
-                          color: Colors.white38, fontSize: 11),
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
                     ),
                   ],
                 ),

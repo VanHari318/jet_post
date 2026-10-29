@@ -16,9 +16,9 @@ class AdminPricingScreen extends StatefulWidget {
 class _AdminPricingScreenState extends State<AdminPricingScreen> {
   final _controller = AdminController();
   final _formKey = GlobalKey<FormState>();
+  SystemSettingsModel? _settings;
   bool _isLoading = true;
   bool _isSaving = false;
-  SystemSettingsModel? _settings;
 
   // Controllers cho từng tham số
   late TextEditingController _basePriceRideCtrl;
@@ -51,6 +51,7 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
   Future<void> _loadSettings() async {
     setState(() => _isLoading = true);
     final settings = await _controller.getSystemSettings();
+    if (!mounted) return;
     setState(() {
       _settings = settings;
       _isLoading = false;
@@ -107,6 +108,10 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
       );
 
       if (!mounted) return;
+      setState(() {
+        _settings = newSettings;
+        _isSaving = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -115,8 +120,8 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      setState(() => _isSaving = false);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -142,6 +147,10 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lastUpdatedInfo = _settings != null
+        ? 'Cập nhật gần nhất bởi ${_settings!.updatedBy} lúc ${_settings!.updatedAt.day}/${_settings!.updatedAt.month}/${_settings!.updatedAt.year} ${_settings!.updatedAt.hour.toString().padLeft(2, '0')}:${_settings!.updatedAt.minute.toString().padLeft(2, '0')}'
+        : 'Đang sử dụng cấu hình mặc định chuẩn hệ thống (global_config)';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cấu hình Biểu cước'),
@@ -178,18 +187,32 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
                         color: AppColors.infoBg,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: AppColors.info.withOpacity(0.3)),
+                            color: AppColors.info.withValues(alpha: 0.3)),
                       ),
-                      child: const Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.info_outline,
-                              color: AppColors.info, size: 18),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Thay đổi sẽ áp dụng ngay lập tức cho tất cả tính cước tiếp theo mà không cần update app.',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.info),
+                          const Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  color: AppColors.info, size: 18),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Thay đổi sẽ áp dụng ngay lập tức cho tất cả tính cước tiếp theo mà không cần update app.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: AppColors.info),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '• $lastUpdatedInfo',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.info,
                             ),
                           ),
                         ],
@@ -224,13 +247,13 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
                       color: AppColors.secondary,
                       children: [
                         _PriceField(
-                          label: 'Giá mở cửa giao hàng',
+                          label: 'Giá mở cửa giao hàng (0-2km đầu)',
                           controller: _basePriceDeliveryCtrl,
                           unit: 'đ',
                           hint: '18000',
                         ),
                         _PriceField(
-                          label: 'Giá mỗi km giao hàng',
+                          label: 'Giá mỗi km giao hàng tiếp theo',
                           controller: _pricePerKmDeliveryCtrl,
                           unit: 'đ/km',
                           hint: '7000',
@@ -401,10 +424,10 @@ class _PriceField extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hint,
               suffixText: unit,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'Không được để trống';

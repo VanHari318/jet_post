@@ -48,9 +48,10 @@ class UserManagementCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor: roleColor.withOpacity(0.15),
-                    backgroundImage:
-                        user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
+                    backgroundColor: roleColor.withValues(alpha: 0.15),
+                    backgroundImage: user.avatarUrl != null
+                        ? NetworkImage(user.avatarUrl!)
+                        : null,
                     child: user.avatarUrl == null
                         ? Icon(Icons.person, color: roleColor, size: 24)
                         : null,
@@ -66,7 +67,8 @@ class UserManagementCard extends StatelessWidget {
                           color: AppColors.error,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.block, color: Colors.white, size: 10),
+                        child: const Icon(Icons.block,
+                            color: Colors.white, size: 10),
                       ),
                     ),
                 ],
@@ -95,7 +97,7 @@ class UserManagementCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: roleColor.withOpacity(0.12),
+                            color: roleColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -111,7 +113,9 @@ class UserManagementCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      user.phone,
+                      user.phone.isNotEmpty
+                          ? user.phone
+                          : (user.email ?? 'Chưa có SĐT'),
                       style: TextStyle(
                         fontSize: 13,
                         color: Theme.of(context).textTheme.bodySmall?.color,

@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../controllers/admin_controller.dart';
 import '../services/admin_service.dart';
@@ -54,18 +56,91 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-        final analytics =
+      final analytics =
           await _controller.getAnalytics(from: _fromDate, to: _toDate);
-        final daily =
+      final daily =
           await _controller.getDailyRevenue(from: _fromDate, to: _toDate);
+      if (!mounted) return;
       setState(() {
         _analytics = analytics;
         _dailyRevenue = daily;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
+  }
+
+  void _exportReport() {
+    if (_analytics == null) return;
+    final a = _analytics!;
+    final reportText = '''
+BÁO CÁO KINH DOANH HỆ THỐNG JETPOST
+Kỳ báo cáo: $_selectedPeriod (${_fromDate.day}/${_fromDate.month}/${_fromDate.year} - ${_toDate.day}/${_toDate.month}/${_toDate.year})
+-----------------------------------------
+1. Tổng doanh thu hoa hồng: ${a.totalRevenue.toStringAsFixed(0)} VNĐ
+   - Doanh thu Xe ôm: ${a.totalRideRevenue.toStringAsFixed(0)} VNĐ
+   - Doanh thu Giao hàng: ${a.totalDeliveryRevenue.toStringAsFixed(0)} VNĐ
+2. Tổng số đơn hàng: ${a.totalOrders} đơn
+   - Hoàn thành: ${a.completedOrders} đơn (${a.completionRate.toStringAsFixed(1)}%)
+   - Đã hủy: ${a.cancelledOrders} đơn
+3. Quy mô vận hành:
+   - Tài xế đang hoạt động: ${a.activeDrivers} đối tác
+   - Người dùng đăng ký mới: ${a.newUsers} tài khoản
+''';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.description_outlined, color: AppColors.success),
+            SizedBox(width: 8),
+            Expanded(child: Text('Xuất Báo cáo Kinh doanh')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.backgroundLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderLight),
+            ),
+            child: Text(
+              reportText.trim(),
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: reportText.trim()));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('📋 Đã sao chép dữ liệu báo cáo vào bộ nhớ tạm!'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('Sao chép báo cáo'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.success,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -76,6 +151,11 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
         backgroundColor: AppColors.success,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.download_outlined),
+            tooltip: 'Xuất báo cáo',
+            onPressed: _analytics == null ? null : _exportReport,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
@@ -108,7 +188,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                           border: Border.all(
                             color: isSelected
                                 ? AppColors.success
-                                : AppColors.success.withOpacity(0.3),
+                                : AppColors.success.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Text(
@@ -116,9 +196,8 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? Colors.white
-                                : AppColors.success,
+                            color:
+                                isSelected ? Colors.white : AppColors.success,
                           ),
                         ),
                       ),
@@ -171,7 +250,8 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                   value: _analytics != null
                       ? '${_analytics!.totalDeliveries}'
                       : '—',
-                  subtitle: '${_analytics?.completedDeliveries ?? 0} hoàn thành',
+                  subtitle:
+                      '${_analytics?.completedDeliveries ?? 0} hoàn thành',
                   icon: Icons.local_shipping_outlined,
                   color: AppColors.secondary,
                   isLoading: _isLoading,
@@ -191,7 +271,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Doanh thu theo ngày',
+                      'Biểu đồ doanh thu theo ngày',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -206,20 +286,16 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                             ),
                           )
                         : SimpleRevenueChart(
-                            data: _dailyRevenue
-                                .map((d) {
-                                  final parts = d.date.split('-');
-                                  final label =
-                                      '${parts[2]}/${parts[1]}';
-                                  return MapEntry(label, d.revenue);
-                                })
-                                .toList(),
+                            data: _dailyRevenue.map((d) {
+                              final parts = d.date.split('-');
+                              final label = '${parts[2]}/${parts[1]}';
+                              return MapEntry(label, d.revenue);
+                            }).toList(),
                             maxRevenue: _dailyRevenue.isEmpty
                                 ? 1
                                 : _dailyRevenue
                                     .map((d) => d.revenue)
-                                    .reduce(
-                                        (a, b) => a > b ? a : b),
+                                    .reduce((a, b) => a > b ? a : b),
                           ),
                   ],
                 ),
@@ -227,7 +303,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Pie chart thay thế - dùng số liệu
+            // Biểu đồ tròn & Tỷ lệ đơn hàng (Task 4.7)
             if (_analytics != null)
               Card(
                 elevation: 2,
@@ -239,34 +315,70 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Phân bổ đơn hàng',
+                        'Biểu đồ tròn: Tỷ lệ hoàn thành vs Hủy đơn',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _AnalyticsLegendRow(
-                        label: 'Hoàn thành',
-                        count: _analytics!.completedOrders,
-                        total: _analytics!.totalOrders,
-                        color: AppColors.success,
-                      ),
-                      const SizedBox(height: 10),
-                      _AnalyticsLegendRow(
-                        label: 'Đã hủy',
-                        count: _analytics!.cancelledOrders,
-                        total: _analytics!.totalOrders,
-                        color: AppColors.error,
-                      ),
-                      const SizedBox(height: 10),
-                      _AnalyticsLegendRow(
-                        label: 'Đang xử lý',
-                        count: _analytics!.totalOrders -
-                            _analytics!.completedOrders -
-                            _analytics!.cancelledOrders,
-                        total: _analytics!.totalOrders,
-                        color: AppColors.warning,
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 110,
+                            height: 110,
+                            child: CustomPaint(
+                              painter: _OrderPieChartPainter(
+                                completed: _analytics!.completedOrders,
+                                cancelled: _analytics!.cancelledOrders,
+                                pending: (_analytics!.totalOrders -
+                                        _analytics!.completedOrders -
+                                        _analytics!.cancelledOrders)
+                                    .clamp(0, 999999),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${_analytics!.totalOrders}\nđơn',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _AnalyticsLegendRow(
+                                  label: 'Hoàn thành',
+                                  count: _analytics!.completedOrders,
+                                  total: _analytics!.totalOrders,
+                                  color: AppColors.success,
+                                ),
+                                const SizedBox(height: 10),
+                                _AnalyticsLegendRow(
+                                  label: 'Đã hủy',
+                                  count: _analytics!.cancelledOrders,
+                                  total: _analytics!.totalOrders,
+                                  color: AppColors.error,
+                                ),
+                                const SizedBox(height: 10),
+                                _AnalyticsLegendRow(
+                                  label: 'Đang xử lý',
+                                  count: (_analytics!.totalOrders -
+                                          _analytics!.completedOrders -
+                                          _analytics!.cancelledOrders)
+                                      .clamp(0, 999999),
+                                  total: _analytics!.totalOrders,
+                                  color: AppColors.warning,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -321,6 +433,23 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: _exportReport,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: const Text('Xuất dữ liệu báo cáo (Export Report)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.success,
+                    side: const BorderSide(color: AppColors.success),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
             ],
             const SizedBox(height: 20),
           ],
@@ -330,11 +459,79 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
   }
 
   String _formatVnd(double value) {
-    if (value >= 1000000000) return '${(value / 1000000000).toStringAsFixed(1)}T đ';
-    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M đ';
-    if (value >= 1000) return '${(value / 1000).toStringAsFixed(0)}k đ';
+    if (value >= 1000000000) {
+      return '${(value / 1000000000).toStringAsFixed(1)}T đ';
+    }
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M đ';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(0)}k đ';
+    }
     return '${value.toStringAsFixed(0)} đ';
   }
+}
+
+class _OrderPieChartPainter extends CustomPainter {
+  final int completed;
+  final int cancelled;
+  final int pending;
+
+  _OrderPieChartPainter({
+    required this.completed,
+    required this.cancelled,
+    required this.pending,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = completed + cancelled + pending;
+    final rect = Offset.zero & size;
+    final strokeWidth = 16.0;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    if (total == 0) {
+      paint.color = AppColors.borderLight;
+      canvas.drawArc(
+        rect.deflate(strokeWidth / 2),
+        0,
+        2 * math.pi,
+        false,
+        paint,
+      );
+      return;
+    }
+
+    double startAngle = -math.pi / 2;
+    final segments = [
+      MapEntry(completed, AppColors.success),
+      MapEntry(cancelled, AppColors.error),
+      MapEntry(pending, AppColors.warning),
+    ];
+
+    for (final seg in segments) {
+      if (seg.key <= 0) continue;
+      final sweep = (seg.key / total) * 2 * math.pi;
+      paint.color = seg.value;
+      canvas.drawArc(
+        rect.deflate(strokeWidth / 2),
+        startAngle,
+        sweep,
+        false,
+        paint,
+      );
+      startAngle += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OrderPieChartPainter old) =>
+      old.completed != completed ||
+      old.cancelled != cancelled ||
+      old.pending != pending;
 }
 
 class _AnalyticsLegendRow extends StatelessWidget {
@@ -359,19 +556,19 @@ class _AnalyticsLegendRow extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 12,
-              height: 12,
+              width: 10,
+              height: 10,
               decoration:
                   BoxDecoration(color: color, shape: BoxShape.circle),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
-              child: Text(label, style: const TextStyle(fontSize: 13)),
+              child: Text(label, style: const TextStyle(fontSize: 12)),
             ),
             Text(
-              '$count đơn (${(ratio * 100).toStringAsFixed(1)}%)',
+              '$count (${(ratio * 100).toStringAsFixed(0)}%)',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -383,9 +580,9 @@ class _AnalyticsLegendRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: ratio,
-            backgroundColor: color.withOpacity(0.12),
+            backgroundColor: color.withValues(alpha: 0.12),
             valueColor: AlwaysStoppedAnimation(color),
-            minHeight: 6,
+            minHeight: 5,
           ),
         ),
       ],
@@ -415,7 +612,7 @@ class _StatRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 16),

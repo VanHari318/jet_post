@@ -1,7 +1,13 @@
 allprojects {
     repositories {
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
         google()
         mavenCentral()
+    }
+    repositories.withType<MavenArtifactRepository>().configureEach {
+        if (url.toString().contains("storage.flutter-io.cn")) {
+            setUrl("https://storage.googleapis.com/download.flutter.io")
+        }
     }
 }
 

@@ -224,7 +224,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                           ),
                           onPressed: () {
                             AppLogger.userAction('Settings', 'Demo Role Switcher ➔ Admin');
-                            Navigator.pushNamed(context, AppRoutes.adminDashboard);
+                            Navigator.pushNamed(context, AppRoutes.adminLogin);
                           },
                           child: const Text('Admin', style: TextStyle(color: Color(0xFF1E88E5), fontSize: 12)),
                         ),

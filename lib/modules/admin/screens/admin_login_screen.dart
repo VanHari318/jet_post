@@ -1,11 +1,13 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
-import '../../../models/user_model.dart';
-import '../screens/admin_dashboard_screen.dart';
+import '../../user/services/user_service.dart';
+import '../controllers/admin_controller.dart';
+import 'admin_dashboard_screen.dart';
 
 /// Task 4.1 - Cổng đăng nhập bảo mật Admin
-/// Chỉ tài khoản có role == 'admin' mới vào được Dashboard
+/// Xác thực qua Firebase Email/Password Auth + kiểm tra role == 'admin' trên Firestore
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
 
@@ -16,7 +18,7 @@ class AdminLoginScreen extends StatefulWidget {
 class _AdminLoginScreenState extends State<AdminLoginScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscurePass = true;
   bool _isLoading = false;
@@ -26,6 +28,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
+  final _adminController = AdminController();
+
   @override
   void initState() {
     super.initState();
@@ -33,19 +37,31 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    _fadeAnim =
-        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.2),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
     _animCtrl.forward();
+    _checkExistingAdminSession();
+  }
+
+  Future<void> _checkExistingAdminSession() async {
+    final savedUser = await UserService.instance.checkAutoLogin();
+    if (!mounted) return;
+    if (savedUser != null && savedUser.role == UserRole.admin) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => AdminDashboardScreen(adminUser: savedUser),
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
     _animCtrl.dispose();
-    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
@@ -57,44 +73,130 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       _errorMsg = null;
     });
 
-    // Demo: Kiểm tra credentials admin cứng (thực tế dùng Firebase Auth + check role)
-    // Số điện thoại admin thử nghiệm: +84911111111 / mật khẩu: admin123
-    await Future.delayed(const Duration(milliseconds: 1200));
+    try {
+      final email = _emailCtrl.text.trim().toLowerCase();
+      final password = _passCtrl.text.trim();
 
-    final phone = _phoneCtrl.text.trim();
-    final pass = _passCtrl.text.trim();
+      UserCredential credential;
+      try {
+        // Bước 1: Đăng nhập Firebase Auth bằng Email/Password
+        credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (e) {
+        // Hỗ trợ tự động khởi tạo tài khoản mẫu admin@jetpost.vn lần đầu trên Firebase
+        if (email == 'admin@jetpost.vn' &&
+            (e.code == 'user-not-found' || e.code == 'invalid-credential')) {
+          credential =
+              await FirebaseAuth.instance.createUserWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+        } else {
+          rethrow;
+        }
+      }
 
-    // Giả lập kiểm tra admin - thực tế: Firebase signIn + Firestore role check
-    if (phone == '0911111111' && pass == 'admin123') {
-      // Tạo dummy admin user để truyền vào dashboard
-      final adminUser = UserModel(
-        id: 'admin_demo_001',
-        phone: '+84911111111',
-        fullName: 'Quản trị viên',
-        role: UserRole.admin,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+      final uid = credential.user?.uid;
+      if (uid == null) {
+        _setError('Không thể xác thực. Vui lòng thử lại.');
+        return;
+      }
+
+      // Nếu là tài khoản demo admin@jetpost.vn, đảm bảo có hồ sơ role == 'admin' trên Firestore
+      if (email == 'admin@jetpost.vn') {
+        await _adminController.ensureAdminProfile(uid: uid, email: email);
+      }
+
+      // Bước 2: Kiểm tra role == 'admin' trên Firestore
+      final isAdmin = await _adminController.isAdmin(uid);
+      if (!isAdmin) {
+        await FirebaseAuth.instance.signOut();
+        _setError(
+            'Tài khoản không có quyền Quản trị viên. Truy cập bị từ chối.');
+        return;
+      }
+
+      // Bước 3: Lấy thông tin Admin profile từ Firestore
+      final adminUser = await _adminController.getAdminProfile(uid);
+
+      if (adminUser == null) {
+        await FirebaseAuth.instance.signOut();
+        _setError('Không tìm thấy hồ sơ Admin trên hệ thống.');
+        return;
+      }
+
+      await UserService.instance.saveUserSession(adminUser);
 
       if (!mounted) return;
+
+      // Bước 4: Điều hướng vào Dashboard Admin
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => AdminDashboardScreen(adminUser: adminUser),
         ),
       );
-    } else {
-      setState(() {
-        _errorMsg =
-            'Thông tin đăng nhập không hợp lệ hoặc không đủ quyền Admin.';
-        _isLoading = false;
-      });
+    } on FirebaseAuthException catch (e) {
+      String msg;
+      switch (e.code) {
+        case 'user-not-found':
+          msg = 'Không tìm thấy tài khoản với email này.';
+          break;
+        case 'wrong-password':
+        case 'invalid-credential':
+          msg = 'Sai mật khẩu hoặc thông tin đăng nhập không hợp lệ.';
+          break;
+        case 'invalid-email':
+          msg = 'Địa chỉ email không hợp lệ.';
+          break;
+        case 'user-disabled':
+          msg = 'Tài khoản này đã bị vô hiệu hóa.';
+          break;
+        case 'too-many-requests':
+          msg =
+              'Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau ít phút.';
+          break;
+        default:
+          msg = 'Lỗi xác thực: ${e.message ?? e.code}';
+      }
+      _setError(msg);
+    } catch (e) {
+      _setError('Đã xảy ra lỗi không mong muốn: $e');
     }
+  }
+
+  void _setError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _errorMsg = message;
+      _isLoading = false;
+    });
+  }
+
+  /// Điền nhanh tài khoản demo cho kiểm thử / bảo vệ đồ án
+  void _fillDemoCredentials() {
+    setState(() {
+      _emailCtrl.text = 'admin@jetpost.vn';
+      _passCtrl.text = 'admin123';
+      _errorMsg = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          tooltip: 'Quay lại Cổng chính',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -102,7 +204,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
             position: _slideAnim,
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(28),
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -114,7 +216,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                         decoration: BoxDecoration(
                           gradient: RadialGradient(
                             colors: [
-                              AppColors.primary.withOpacity(0.3),
+                              AppColors.primary.withValues(alpha: 0.3),
                               Colors.transparent,
                             ],
                           ),
@@ -123,10 +225,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                         child: Container(
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.15),
+                            color: AppColors.primary.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: AppColors.primary.withOpacity(0.4),
+                              color: AppColors.primary.withValues(alpha: 0.4),
                               width: 2,
                             ),
                           ),
@@ -137,7 +239,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       const Text(
                         'Cổng Quản trị viên',
                         style: TextStyle(
@@ -148,13 +250,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'JetPost Admin Panel',
+                        'JetPost Admin Dispatcher & Core Panel',
                         style: TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondaryDark,
                         ),
                       ),
-                      const SizedBox(height: 36),
+                      const SizedBox(height: 30),
                       // Form Card
                       Container(
                         padding: const EdgeInsets.all(24),
@@ -167,16 +269,16 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                         ),
                         child: Column(
                           children: [
-                            // Phone field
+                            // Email field
                             TextFormField(
-                              controller: _phoneCtrl,
-                              keyboardType: TextInputType.phone,
+                              controller: _emailCtrl,
+                              keyboardType: TextInputType.emailAddress,
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
-                                labelText: 'Số điện thoại Admin',
+                                labelText: 'Email Quản trị viên',
                                 labelStyle: const TextStyle(
                                     color: AppColors.textSecondaryDark),
-                                prefixIcon: const Icon(Icons.phone_outlined,
+                                prefixIcon: const Icon(Icons.email_outlined,
                                     color: AppColors.primary),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -198,13 +300,16 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                                   borderSide: const BorderSide(
                                       color: AppColors.error, width: 2),
                                 ),
-                                hintText: '0911111111',
+                                hintText: 'admin@jetpost.vn',
                                 hintStyle: const TextStyle(
                                     color: AppColors.textMutedDark),
                               ),
                               validator: (v) {
                                 if (v == null || v.isEmpty) {
-                                  return 'Vui lòng nhập số điện thoại';
+                                  return 'Vui lòng nhập email';
+                                }
+                                if (!v.contains('@')) {
+                                  return 'Email không hợp lệ';
                                 }
                                 return null;
                               },
@@ -256,10 +361,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                                 if (v == null || v.isEmpty) {
                                   return 'Vui lòng nhập mật khẩu';
                                 }
+                                if (v.length < 6) {
+                                  return 'Mật khẩu phải có ít nhất 6 ký tự';
+                                }
                                 return null;
                               },
                             ),
-                            // Error
+                            // Error message
                             if (_errorMsg != null) ...[
                               const SizedBox(height: 12),
                               Container(
@@ -323,32 +431,47 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Demo hint
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppColors.primary.withOpacity(0.2),
+                      // Demo credentials chip for testing
+                      GestureDetector(
+                        onTap: _fillDemoCredentials,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryLight.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.2),
+                            ),
                           ),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                size: 14, color: AppColors.primary),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Demo: SĐT 0911111111 | Mật khẩu: admin123',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.primary,
+                          child: const Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  size: 14, color: AppColors.primary),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Demo: admin@jetpost.vn (MK: admin123) | Chạm điền nhanh',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                              Icon(Icons.touch_app_outlined,
+                                  size: 14, color: AppColors.primary),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Chỉ tài khoản có quyền Admin (role == admin) mới được phép truy cập.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMutedDark,
                         ),
                       ),
                     ],

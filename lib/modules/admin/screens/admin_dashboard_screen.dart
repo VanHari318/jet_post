@@ -4,13 +4,13 @@ import '../../../models/user_model.dart';
 import '../controllers/admin_controller.dart';
 import '../services/admin_service.dart';
 import '../widgets/admin_widgets.dart';
-import 'admin_radar_screen.dart';
-import 'admin_kyc_review_screen.dart';
-import 'admin_user_management_screen.dart';
-import 'admin_dispute_screen.dart';
-import 'admin_pricing_screen.dart';
 import 'admin_analytics_screen.dart';
 import 'admin_broadcast_screen.dart';
+import 'admin_dispute_screen.dart';
+import 'admin_kyc_review_screen.dart';
+import 'admin_pricing_screen.dart';
+import 'admin_radar_screen.dart';
+import 'admin_user_management_screen.dart';
 
 /// Task 4.1 + 4.7 - Dashboard Admin: Màn hình tổng quan điều hành
 /// Tích hợp Menu Drawer, KPI Overview và điều hướng các màn hình con
@@ -28,6 +28,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final _controller = AdminController();
   AdminAnalyticsData? _analytics;
   bool _analyticsLoading = true;
+  bool _isSeeding = false;
 
   // Khoảng thời gian mặc định: 7 ngày gần nhất
   late DateTime _fromDate;
@@ -44,13 +45,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _loadAnalytics() async {
     setState(() => _analyticsLoading = true);
     try {
-      final data = await _controller.getAnalytics(from: _fromDate, to: _toDate);
+      final data =
+          await _controller.getAnalytics(from: _fromDate, to: _toDate);
+      if (!mounted) return;
       setState(() {
         _analytics = data;
         _analyticsLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _analyticsLoading = false);
+    }
+  }
+
+  Future<void> _seedDemoData() async {
+    setState(() => _isSeeding = true);
+    try {
+      await _controller.seedDemoAdminData(widget.adminUser.id);
+      await _loadAnalytics();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              '✅ Đã nạp dữ liệu mẫu (Tài xế Radar, Hồ sơ eKYC, Đơn hàng PoD)!'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi tạo dữ liệu mẫu: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSeeding = false);
     }
   }
 
@@ -58,19 +89,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     setState(() => _currentMenuIndex = index);
     switch (index) {
       case 1:
-        Navigator.push(context, _route(AdminRadarScreen(adminUser: widget.adminUser)));
+        Navigator.push(
+                context, _route(AdminRadarScreen(adminUser: widget.adminUser)))
+            .then((_) => _loadAnalytics());
       case 2:
-        Navigator.push(context, _route(const AdminKycReviewScreen()));
+        Navigator.push(
+          context,
+          _route(AdminKycReviewScreen(adminId: widget.adminUser.id)),
+        ).then((_) => _loadAnalytics());
       case 3:
-        Navigator.push(context, _route(const AdminUserManagementScreen()));
+        Navigator.push(
+          context,
+          _route(AdminUserManagementScreen(adminId: widget.adminUser.id)),
+        ).then((_) => _loadAnalytics());
       case 4:
-        Navigator.push(context, _route(const AdminDisputeScreen()));
+        Navigator.push(
+          context,
+          _route(AdminDisputeScreen(adminId: widget.adminUser.id)),
+        );
       case 5:
-        Navigator.push(context, _route(AdminPricingScreen(adminId: widget.adminUser.id)));
+        Navigator.push(
+          context,
+          _route(AdminPricingScreen(adminId: widget.adminUser.id)),
+        );
       case 6:
         Navigator.push(context, _route(const AdminAnalyticsScreen()));
       case 7:
-        Navigator.push(context, _route(AdminBroadcastScreen(adminId: widget.adminUser.id)));
+        Navigator.push(
+          context,
+          _route(AdminBroadcastScreen(adminId: widget.adminUser.id)),
+        );
       default:
         break;
     }
@@ -93,6 +141,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             expandedHeight: 160,
             pinned: true,
             backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
@@ -139,6 +188,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             actions: [
               IconButton(
+                icon: _isSeeding
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.auto_fix_high, color: Colors.white),
+                onPressed: _isSeeding ? null : _seedDemoData,
+                tooltip: 'Nạp dữ liệu mẫu Demo',
+              ),
+              IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 onPressed: _loadAnalytics,
                 tooltip: 'Làm mới dữ liệu',
@@ -153,6 +216,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Pending KYC Badge
+                  _PendingKycBanner(onReview: () => _navigateTo(2)),
+
                   // KPI Cards Grid
                   _SectionHeader(
                     title: 'Tổng quan 7 ngày qua',
@@ -161,9 +227,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       icon: const Icon(Icons.bar_chart, size: 16),
                       label: const Text('Chi tiết'),
                       style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          textStyle:
-                              const TextStyle(fontSize: 12)),
+                        foregroundColor: AppColors.primary,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -222,14 +288,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const SizedBox(height: 24),
 
                   // Quick Actions
-                  const _SectionHeader(title: 'Thao tác nhanh'),
+                  const _SectionHeader(title: 'Trung tâm Điều hành (8 Nghiệp vụ)'),
                   const SizedBox(height: 12),
                   _QuickActionsGrid(onNavigate: _navigateTo),
-
-                  const SizedBox(height: 24),
-
-                  // Pending KYC Badge
-                  _PendingKycBanner(onReview: () => _navigateTo(2)),
 
                   const SizedBox(height: 24),
                 ],
@@ -244,7 +305,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _navigateToAnalytics() => _navigateTo(6);
 
   String _formatDateRange() {
-    return '${_fromDate.day}/${_fromDate.month} - ${_toDate.day}/${_toDate.month}/${_toDate.year}';
+    return 'Kỳ báo cáo: ${_fromDate.day}/${_fromDate.month} - ${_toDate.day}/${_toDate.month}/${_toDate.year}';
   }
 
   String _formatVnd(double value) {
@@ -279,7 +340,7 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        if (action != null) action!,
+        ?action,
       ],
     );
   }
@@ -293,39 +354,45 @@ class _QuickActionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = [
-      _QuickAction(
+      const _QuickAction(
         icon: Icons.radar,
         label: 'Radar\nĐiều hành',
         color: AppColors.primary,
         index: 1,
       ),
-      _QuickAction(
+      const _QuickAction(
         icon: Icons.assignment_ind_outlined,
-        label: 'Duyệt hồ\nsơ KYC',
+        label: 'Duyệt hồ\nsơ eKYC',
         color: AppColors.warning,
         index: 2,
       ),
-      _QuickAction(
+      const _QuickAction(
         icon: Icons.manage_accounts_outlined,
         label: 'Quản lý\nNgười dùng',
         color: AppColors.accent,
         index: 3,
       ),
-      _QuickAction(
+      const _QuickAction(
         icon: Icons.gavel_outlined,
-        label: 'Tranh\nchấp',
+        label: 'Tranh chấp\n& PoD',
         color: AppColors.error,
         index: 4,
       ),
-      _QuickAction(
+      const _QuickAction(
         icon: Icons.price_change_outlined,
-        label: 'Biểu\ncước',
+        label: 'Cấu hình\nBiểu cước',
         color: AppColors.secondary,
         index: 5,
       ),
-      _QuickAction(
+      const _QuickAction(
+        icon: Icons.bar_chart_rounded,
+        label: 'Báo cáo\nThống kê',
+        color: AppColors.success,
+        index: 6,
+      ),
+      const _QuickAction(
         icon: Icons.campaign_outlined,
-        label: 'Phát\nthông báo',
+        label: 'Phát\nThông báo',
         color: AppColors.info,
         index: 7,
       ),
@@ -336,7 +403,7 @@ class _QuickActionsGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        childAspectRatio: 1.1,
+        childAspectRatio: 1.08,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
       ),
@@ -381,10 +448,10 @@ class _QuickActionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Container(
           decoration: BoxDecoration(
-            color: action.color.withOpacity(0.08),
+            color: action.color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: action.color.withOpacity(0.2),
+              color: action.color.withValues(alpha: 0.2),
             ),
           ),
           child: Column(
@@ -393,7 +460,7 @@ class _QuickActionCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: action.color.withOpacity(0.12),
+                  color: action.color.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(action.icon, color: action.color, size: 22),
@@ -429,62 +496,66 @@ class _PendingKycBanner extends StatelessWidget {
         final count = snapshot.data?.length ?? 0;
         if (count == 0) return const SizedBox.shrink();
 
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppColors.warning.withOpacity(0.15),
-                AppColors.secondary.withOpacity(0.08),
-              ],
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.warning.withValues(alpha: 0.15),
+                  AppColors.secondary.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
             ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.warning.withOpacity(0.4)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.warningBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child:
-                    const Icon(Icons.assignment_late, color: AppColors.warning),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$count hồ sơ đang chờ duyệt!',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const Text(
-                      'Tài xế mới đã nộp hồ sơ eKYC',
-                      style: TextStyle(
-                          fontSize: 12, color: AppColors.textSecondaryLight),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: onReview,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.warning,
-                  backgroundColor: AppColors.warningBg,
-                  shape: RoundedRectangleBorder(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningBg,
                     borderRadius: BorderRadius.circular(10),
                   ),
+                  child: const Icon(Icons.assignment_late,
+                      color: AppColors.warning),
                 ),
-                child: const Text('Xét duyệt',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$count hồ sơ đang chờ duyệt!',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const Text(
+                        'Tài xế mới đã nộp hồ sơ eKYC',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSecondaryLight),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: onReview,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.warning,
+                    backgroundColor: AppColors.warningBg,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Xét duyệt',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
           ),
         );
       },

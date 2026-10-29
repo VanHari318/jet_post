@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/cloudinary_service.dart';
 import '../../../models/driver_model.dart';
 import '../../../models/user_model.dart';
 import '../controllers/admin_controller.dart';
@@ -7,7 +8,12 @@ import '../widgets/admin_widgets.dart';
 
 /// Task 4.3 - Thẩm định & Phê duyệt Hồ sơ Đối tác Tài xế eKYC
 class AdminKycReviewScreen extends StatefulWidget {
-  const AdminKycReviewScreen({super.key});
+  final String adminId;
+
+  const AdminKycReviewScreen({
+    super.key,
+    this.adminId = 'admin_demo_001',
+  });
 
   @override
   State<AdminKycReviewScreen> createState() => _AdminKycReviewScreenState();
@@ -63,21 +69,24 @@ class _AdminKycReviewScreenState extends State<AdminKycReviewScreen> {
         builder: (_) => AdminKycDetailScreen(
           driver: driver,
           userInfo: userInfo,
+          adminId: widget.adminId,
         ),
       ),
     );
   }
 }
 
-/// Màn hình chi tiết xem ảnh giấy tờ và ra quyết định duyệt/từ chối
+/// Màn hình chi tiết xem ảnh giấy tờ (có hỗ trợ phóng to InteractiveViewer) và ra quyết định duyệt/từ chối
 class AdminKycDetailScreen extends StatefulWidget {
   final DriverModel driver;
   final UserModel? userInfo;
+  final String adminId;
 
   const AdminKycDetailScreen({
     super.key,
     required this.driver,
     this.userInfo,
+    this.adminId = 'admin_demo_001',
   });
 
   @override
@@ -100,11 +109,14 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
     try {
       await _controller.approveDriver(
         driverId: widget.driver.id,
-        adminId: 'admin_demo_001', // TODO: lấy từ Auth
+        adminId: widget.adminId,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
-      _showSnackBar('✅ Đã phê duyệt tài xế thành công!', AppColors.success);
+      _showSnackBar(
+        '✅ Đã phê duyệt hồ sơ! Tài xế đã chuyển sang trạng thái ACTIVE.',
+        AppColors.success,
+      );
     } catch (e) {
       setState(() => _isProcessing = false);
       _showSnackBar('Lỗi: $e', AppColors.error);
@@ -116,12 +128,12 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Từ chối hồ sơ'),
+        title: const Text('Từ chối hồ sơ eKYC'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Nhập lý do từ chối (sẽ gửi về app tài xế):'),
+            const Text('Nhập lý do từ chối (sẽ gửi thông báo về máy tài xế):'),
             const SizedBox(height: 10),
             TextField(
               controller: _rejectReasonCtrl,
@@ -129,8 +141,8 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
               decoration: InputDecoration(
                 hintText:
                     'VD: Ảnh bằng lái bị lóa, vui lòng chụp lại rõ hơn...',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ],
@@ -143,20 +155,21 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white),
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Xác nhận từ chối'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && _rejectReasonCtrl.text.isNotEmpty) {
+    if (confirmed == true && _rejectReasonCtrl.text.trim().isNotEmpty) {
       setState(() => _isProcessing = true);
       try {
         await _controller.rejectDriver(
           driverId: widget.driver.id,
-          adminId: 'admin_demo_001',
+          adminId: widget.adminId,
           reason: _rejectReasonCtrl.text.trim(),
         );
         if (!mounted) return;
@@ -186,7 +199,7 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chi tiết Hồ sơ'),
+        title: const Text('Chi tiết Hồ sơ eKYC'),
         backgroundColor: AppColors.warning,
         foregroundColor: Colors.white,
       ),
@@ -197,16 +210,17 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
           children: [
             // Thông tin cá nhân
             _SectionCard(
-              title: 'Thông tin tài xế',
+              title: 'Thông tin đối tác đăng ký',
               child: Column(
                 children: [
                   _DetailRow(label: 'Họ tên', value: user?.fullName ?? 'N/A'),
-                  _DetailRow(label: 'Số điện thoại', value: user?.phone ?? 'N/A'),
+                  _DetailRow(
+                      label: 'Số điện thoại', value: user?.phone ?? 'N/A'),
                   _DetailRow(label: 'Biển số xe', value: driver.plateNumber),
                   _DetailRow(label: 'Loại xe', value: driver.vehicleType),
-                  _DetailRow(
+                  const _DetailRow(
                     label: 'Trạng thái',
-                    value: 'Chờ xét duyệt',
+                    value: 'Chờ xét duyệt (PENDING_APPROVAL)',
                     valueColor: AppColors.warning,
                   ),
                 ],
@@ -215,7 +229,7 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
             const SizedBox(height: 16),
             // Ảnh CCCD
             const Text(
-              'Căn cước công dân (CCCD)',
+              'Căn cước công dân (CCCD - Chạm để phóng to)',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -223,14 +237,14 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
               children: [
                 Expanded(
                   child: _DocumentImageCard(
-                    title: 'Mặt trước',
+                    title: 'CCCD Mặt trước',
                     imageUrl: driver.idCardFrontUrl,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: _DocumentImageCard(
-                    title: 'Mặt sau',
+                    title: 'CCCD Mặt sau',
                     imageUrl: driver.idCardBackUrl,
                   ),
                 ),
@@ -239,12 +253,12 @@ class _AdminKycDetailScreenState extends State<AdminKycDetailScreen> {
             const SizedBox(height: 16),
             // Ảnh GPLX
             const Text(
-              'Giấy phép lái xe (GPLX)',
+              'Giấy phép lái xe (GPLX - Chạm để phóng to)',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             _DocumentImageCard(
-              title: 'Giấy phép lái xe',
+              title: 'Giấy phép lái xe (GPLX)',
               imageUrl: driver.licenseUrl,
               fullWidth: true,
             ),
@@ -382,26 +396,96 @@ class _DocumentImageCard extends StatelessWidget {
     this.fullWidth = false,
   });
 
+  void _openFullScreenZoom(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 450,
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Center(child: _ImagePlaceholder()),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 140,
-      width: fullWidth ? double.infinity : null,
-      decoration: BoxDecoration(
-        color: AppColors.backgroundLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderLight),
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    final optimizedUrl = hasImage
+        ? CloudinaryService.instance.getOptimizedUrl(imageUrl!, width: 800)
+        : null;
+
+    return GestureDetector(
+      onTap: hasImage ? () => _openFullScreenZoom(context, optimizedUrl!) : null,
+      child: Container(
+        height: 150,
+        width: fullWidth ? double.infinity : null,
+        decoration: BoxDecoration(
+          color: AppColors.backgroundLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderLight),
+        ),
+        child: hasImage
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      optimizedUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _ImagePlaceholder(label: title),
+                    ),
+                  ),
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'Phóng to',
+                            style: TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : _ImagePlaceholder(label: title),
       ),
-      child: imageUrl != null && imageUrl!.isNotEmpty
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                imageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const _ImagePlaceholder(),
-              ),
-            )
-          : _ImagePlaceholder(label: title),
     );
   }
 }
@@ -416,13 +500,17 @@ class _ImagePlaceholder extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.image_not_supported_outlined,
+        const Icon(Icons.image_not_supported_outlined,
             size: 36, color: AppColors.textMutedLight),
         if (label != null) ...[
           const SizedBox(height: 6),
-          Text(label!,
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textMutedLight)),
+          Text(
+            label!,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textMutedLight,
+            ),
+          ),
         ],
       ],
     );
@@ -434,14 +522,13 @@ class _EmptyKycList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.check_circle_outline,
-              size: 72, color: AppColors.success),
-          const SizedBox(height: 16),
-          const Text(
+          Icon(Icons.check_circle_outline, size: 72, color: AppColors.success),
+          SizedBox(height: 16),
+          Text(
             'Không có hồ sơ chờ duyệt',
             style: TextStyle(
               fontSize: 16,
@@ -449,9 +536,9 @@ class _EmptyKycList extends StatelessWidget {
               color: AppColors.success,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
-            'Tất cả hồ sơ đã được xét duyệt',
+            'Tất cả hồ sơ đối tác đã được thẩm định',
             style: TextStyle(color: AppColors.textSecondaryLight),
           ),
         ],

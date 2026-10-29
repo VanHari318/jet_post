@@ -15,7 +15,13 @@ class AdminController {
 
   // Task 4.1
   Future<bool> isAdmin(String uid) => _service.isAdmin(uid);
-  Future<UserModel?> getAdminProfile(String uid) => _service.getAdminProfile(uid);
+  Future<UserModel?> getAdminProfile(String uid) =>
+      _service.getAdminProfile(uid);
+  Future<UserModel> ensureAdminProfile({
+    required String uid,
+    required String email,
+  }) =>
+      _service.ensureAdminProfile(uid: uid, email: email);
 
   // Task 4.2
   Stream<List<DriverModel>> watchAllOnlineDrivers() =>
@@ -51,18 +57,28 @@ class AdminController {
       _service.watchUsers(roleFilter: roleFilter);
   Future<List<UserModel>> searchUsers(String keyword) =>
       _service.searchUsers(keyword);
-  Future<List<RideModel>> getUserRideHistory(String customerId,
-          {int limit = 20}) =>
+  Future<List<RideModel>> getUserRideHistory(
+    String customerId, {
+    int limit = 20,
+  }) =>
       _service.getUserRideHistory(customerId, limit: limit);
-  Future<List<RideModel>> getDriverRideHistory(String driverId,
-          {int limit = 20}) =>
+  Future<List<RideModel>> getDriverRideHistory(
+    String driverId, {
+    int limit = 20,
+  }) =>
       _service.getDriverRideHistory(driverId, limit: limit);
   Future<void> banUser({
     required String userId,
     required String adminId,
     required String reason,
+    String duration = 'PERMANENT',
   }) =>
-      _service.banUser(userId: userId, adminId: adminId, reason: reason);
+      _service.banUser(
+        userId: userId,
+        adminId: adminId,
+        reason: reason,
+        duration: duration,
+      );
   Future<void> unbanUser({
     required String userId,
     required String adminId,
@@ -72,15 +88,29 @@ class AdminController {
   // Task 4.5
   Future<DeliveryModel?> getDeliveryById(String deliveryId) =>
       _service.getDeliveryById(deliveryId);
-  Future<RideModel?> getRideById(String rideId) => _service.getRideById(rideId);
+  Future<RideModel?> getRideById(String rideId) =>
+      _service.getRideById(rideId);
   Stream<List<DeliveryModel>> watchDeliveriesForDispute({
     String? status,
     int limit = 50,
   }) =>
       _service.watchDeliveriesForDispute(status: status, limit: limit);
+  Future<void> resolveDispute({
+    required String deliveryId,
+    required String adminId,
+    required String decision,
+    required String note,
+  }) =>
+      _service.resolveDispute(
+        deliveryId: deliveryId,
+        adminId: adminId,
+        decision: decision,
+        note: note,
+      );
 
   // Task 4.6
-  Future<SystemSettingsModel?> getSystemSettings() => _service.getSystemSettings();
+  Future<SystemSettingsModel?> getSystemSettings() =>
+      _service.getSystemSettings();
   Stream<SystemSettingsModel?> watchSystemSettings() =>
       _service.watchSystemSettings();
   Future<void> saveSystemSettings({
@@ -120,4 +150,8 @@ class AdminController {
       );
   Stream<List<SystemNotificationModel>> watchBroadcastHistory() =>
       _service.watchBroadcastHistory();
+
+  // Demo Data Seeder
+  Future<void> seedDemoAdminData(String adminId) =>
+      _service.seedDemoAdminData(adminId);
 }

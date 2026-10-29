@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
+import 'modules/admin/screens/admin_login_screen.dart';
 import 'routes/app_routes.dart';
 
 void main() async {
@@ -34,7 +35,10 @@ class JetPostApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme,
           themeMode: currentMode,
           initialRoute: AppRoutes.welcomeGate,
-          routes: AppRoutes.routes,
+          routes: {
+            ...AppRoutes.routes,
+            AppRoutes.adminLogin: (context) => const AdminLoginScreen(),
+          },
           onGenerateRoute: AppRoutes.onGenerateRoute,
           onUnknownRoute: AppRoutes.onUnknownRoute,
         );

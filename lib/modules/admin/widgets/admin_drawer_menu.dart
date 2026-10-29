@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../routes/app_routes.dart';
+import '../../user/services/user_service.dart';
 
 class AdminDrawerMenu extends StatelessWidget {
   final int currentIndex;
@@ -43,7 +45,7 @@ class AdminDrawerMenu extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.admin_panel_settings,
@@ -105,7 +107,7 @@ class AdminDrawerMenu extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               border: Border(
                 top: BorderSide(
@@ -113,19 +115,47 @@ class AdminDrawerMenu extends StatelessWidget {
                 ),
               ),
             ),
-            child: ListTile(
-              leading: const Icon(Icons.logout, color: AppColors.error),
-              title: const Text(
-                'Đăng xuất',
-                style: TextStyle(color: AppColors.error, fontSize: 14),
-              ),
-              onTap: () {
-                Navigator.of(context).pop();
-              },
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz, color: AppColors.accent),
+                  title: const Text(
+                    'Đổi phân hệ (Welcome Gate)',
+                    style: TextStyle(color: AppColors.accent, fontSize: 13.5),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      AppRoutes.welcomeGate,
+                      (route) => false,
+                    );
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.logout, color: AppColors.error),
+                  title: const Text(
+                    'Đăng xuất Quản trị',
+                    style: TextStyle(color: AppColors.error, fontSize: 14),
+                  ),
+                  onTap: () async {
+                    final nav = Navigator.of(context);
+                    nav.pop();
+                    await UserService.instance.clearUserSession();
+                    nav.pushNamedAndRemoveUntil(
+                      AppRoutes.welcomeGate,
+                      (route) => false,
+                    );
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ],
             ),
           ),
         ],
