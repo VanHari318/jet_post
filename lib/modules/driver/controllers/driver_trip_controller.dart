@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../../models/delivery_model.dart';
 import '../../../models/ride_model.dart';
 import '../../../core/constants/app_enums.dart';
+import '../../../core/utils/geohash_util.dart';
 
 /// Loại chuyến đi của tài xế
 enum TripType { ride, delivery }
@@ -34,6 +35,26 @@ class DriverTripController {
   // ── Khởi tạo: lắng nghe realtime trip document ───────────────────────────
   void init() {
     _listenTrip();
+  }
+
+  Future<void> updateDriverLocation(
+    double latitude,
+    double longitude,
+    double heading,
+  ) async {
+    if (driverUid.isEmpty) return;
+    try {
+      await _firestore.collection('drivers').doc(driverUid).update({
+        'currentLat': latitude,
+        'currentLng': longitude,
+        'heading': heading,
+        'geohash': GeohashUtil.encode(latitude, longitude, precision: 6),
+        'lastActiveAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      debugPrint('Không thể đồng bộ vị trí tài xế: $error');
+      errorMessage.value = 'Không thể đồng bộ vị trí tài xế.';
+    }
   }
 
   /// Lắng nghe realtime document của chuyến đang thực hiện

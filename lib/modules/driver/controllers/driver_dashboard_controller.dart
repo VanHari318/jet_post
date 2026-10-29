@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../models/delivery_model.dart';
 import '../../../models/driver_model.dart';
 import '../../../models/ride_model.dart';
@@ -21,15 +22,25 @@ class DriverDashboardController {
   final ValueNotifier<UserModel?> userModel = ValueNotifier(null);
   final ValueNotifier<bool> isOnline = ValueNotifier(false);
   final ValueNotifier<List<RideModel>> pendingRides = ValueNotifier([]);
-  final ValueNotifier<List<DeliveryModel>> pendingDeliveries = ValueNotifier([]);
+  final ValueNotifier<List<DeliveryModel>> pendingDeliveries = ValueNotifier(
+    [],
+  );
+  final ValueNotifier<List<RideModel>> availableRides = ValueNotifier([]);
+  final ValueNotifier<List<DeliveryModel>> availableDeliveries = ValueNotifier(
+    [],
+  );
+  final ValueNotifier<bool> isSearchingOrders = ValueNotifier(false);
   final ValueNotifier<String?> errorMessage = ValueNotifier(null);
 
   // ── Subscriptions Firestore realtime ─────────────────────────────────────
   StreamSubscription<DocumentSnapshot>? _driverSub;
   StreamSubscription<QuerySnapshot>? _ridesSub;
   StreamSubscription<QuerySnapshot>? _deliveriesSub;
+  int _availableOrdersRequestId = 0;
 
   String get _uid => _auth.currentUser?.uid ?? '';
+  String get driverUid => _uid;
+  bool get isDemoMode => _uid.isEmpty;
 
   // ── Khởi tạo: load dữ liệu tài xế và bắt đầu lắng nghe ─────────────────
   Future<void> init() async {
@@ -61,23 +72,26 @@ class DriverDashboardController {
         .collection('drivers')
         .doc(_uid)
         .snapshots()
-        .listen((snap) {
-      if (snap.exists) {
-        final driver = DriverModel.fromFirestore(snap);
-        driverModel.value = driver;
-        isOnline.value = driver.isOnline;
+        .listen(
+          (snap) {
+            if (snap.exists) {
+              final driver = DriverModel.fromFirestore(snap);
+              driverModel.value = driver;
+              isOnline.value = driver.isOnline;
 
-        // Khi tài xế online → bắt đầu lắng nghe đơn mới
-        if (driver.isOnline && !driver.isBusy) {
-          _startListeningOrders();
-        } else {
-          // Offline hoặc đang bận → dừng lắng nghe đơn mới
-          _stopListeningOrders();
-        }
-      }
-    }, onError: (e) {
-      errorMessage.value = 'Lỗi đồng bộ dữ liệu tài xế.';
-    });
+              // Khi tài xế online → bắt đầu lắng nghe đơn mới
+              if (driver.isOnline && !driver.isBusy) {
+                _startListeningOrders();
+              } else {
+                // Offline hoặc đang bận → dừng lắng nghe đơn mới
+                _stopListeningOrders();
+              }
+            }
+          },
+          onError: (e) {
+            errorMessage.value = 'Lỗi đồng bộ dữ liệu tài xế.';
+          },
+        );
   }
 
   /// Bắt đầu lắng nghe đơn xe ôm và giao hàng đang chờ tài xế
@@ -92,15 +106,20 @@ class DriverDashboardController {
     _ridesSub = _firestore
         .collection('rides')
         .where('status', isEqualTo: RideStatus.pendingDriver.toFirestore())
-        .orderBy('createdAt', descending: true)
-        .limit(5)
+        .limit(50)
         .snapshots()
-        .listen((snap) {
-      pendingRides.value =
-          snap.docs.map((d) => RideModel.fromFirestore(d)).toList();
-    }, onError: (_) {
-      pendingRides.value = [];
-    });
+        .listen(
+          (snap) {
+            final rides =
+                snap.docs.map((doc) => RideModel.fromFirestore(doc)).toList()
+                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            pendingRides.value = rides.take(5).toList();
+          },
+          onError: (Object error) {
+            pendingRides.value = [];
+            errorMessage.value = 'Không thể cập nhật danh sách cuốc xe.';
+          },
+        );
   }
 
   /// Lắng nghe danh sách đơn giao hàng đang chờ (PENDING_DRIVER)
@@ -109,15 +128,22 @@ class DriverDashboardController {
     _deliveriesSub = _firestore
         .collection('deliveries')
         .where('status', isEqualTo: DeliveryStatus.pendingDriver.toFirestore())
-        .orderBy('createdAt', descending: true)
-        .limit(5)
+        .limit(50)
         .snapshots()
-        .listen((snap) {
-      pendingDeliveries.value =
-          snap.docs.map((d) => DeliveryModel.fromFirestore(d)).toList();
-    }, onError: (_) {
-      pendingDeliveries.value = [];
-    });
+        .listen(
+          (snap) {
+            final deliveries =
+                snap.docs
+                    .map((doc) => DeliveryModel.fromFirestore(doc))
+                    .toList()
+                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            pendingDeliveries.value = deliveries.take(5).toList();
+          },
+          onError: (Object error) {
+            pendingDeliveries.value = [];
+            errorMessage.value = 'Không thể cập nhật danh sách đơn giao hàng.';
+          },
+        );
   }
 
   /// Dừng lắng nghe đơn mới (khi offline hoặc đang bận chuyến)
@@ -130,11 +156,99 @@ class DriverDashboardController {
     pendingDeliveries.value = [];
   }
 
+  Future<void> refreshAvailableOrders({
+    required LatLng center,
+    required double radiusKm,
+    required String filter,
+  }) async {
+    final requestId = ++_availableOrdersRequestId;
+    isSearchingOrders.value = true;
+    errorMessage.value = null;
+    try {
+      final ridesFuture = filter == 'delivery'
+          ? null
+          : _firestore
+                .collection('rides')
+                .where(
+                  'status',
+                  isEqualTo: RideStatus.pendingDriver.toFirestore(),
+                )
+                .limit(50)
+                .get();
+      final deliveriesFuture = filter == 'ride'
+          ? null
+          : _firestore
+                .collection('deliveries')
+                .where(
+                  'status',
+                  isEqualTo: DeliveryStatus.pendingDriver.toFirestore(),
+                )
+                .limit(50)
+                .get();
+
+      final rideDocs = ridesFuture == null
+          ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
+          : (await ridesFuture).docs;
+      final deliveryDocs = deliveriesFuture == null
+          ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
+          : (await deliveriesFuture).docs;
+
+      final distance = const Distance();
+      bool isWithinRadius(double latitude, double longitude) {
+        if (latitude == 0 || longitude == 0) return false;
+        return distance.as(
+              LengthUnit.Kilometer,
+              center,
+              LatLng(latitude, longitude),
+            ) <=
+            radiusKm;
+      }
+
+      final rides =
+          rideDocs
+              .map(RideModel.fromFirestore)
+              .where((ride) => isWithinRadius(ride.pickupLat, ride.pickupLng))
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final deliveries =
+          deliveryDocs
+              .map(DeliveryModel.fromFirestore)
+              .where(
+                (delivery) =>
+                    isWithinRadius(delivery.pickupLat, delivery.pickupLng),
+              )
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      if (requestId == _availableOrdersRequestId) {
+        availableRides.value = rides;
+        availableDeliveries.value = deliveries;
+      }
+    } catch (e) {
+      if (requestId == _availableOrdersRequestId) {
+        errorMessage.value = 'Không thể tìm đơn quanh bạn. Vui lòng thử lại.';
+      }
+    } finally {
+      if (requestId == _availableOrdersRequestId) {
+        isSearchingOrders.value = false;
+      }
+    }
+  }
+
   // ── Toggle Online / Offline ───────────────────────────────────────────────
 
   /// Bật/tắt trạng thái nhận cuốc — cập nhật lên Firestore
-  Future<void> toggleOnline() async {
-    if (_uid.isEmpty) return;
+  Future<void> toggleOnline({LatLng? currentPosition}) async {
+    if (driverModel.value?.isBusy == true) {
+      errorMessage.value =
+          'Bạn đang thực hiện chuyến, không thể đổi trạng thái.';
+      return;
+    }
+
+    if (_uid.isEmpty) {
+      isOnline.value = !isOnline.value;
+      return;
+    }
     final newStatus = !isOnline.value;
     try {
       final Map<String, dynamic> updateData = {
@@ -143,7 +257,15 @@ class DriverDashboardController {
       };
 
       // Khi chuyển sang online → cập nhật geohash từ vị trí hiện tại trong model
-      if (newStatus && driverModel.value != null) {
+      if (newStatus && currentPosition != null) {
+        final lat = currentPosition.latitude;
+        final lng = currentPosition.longitude;
+        updateData['currentLat'] = lat;
+        updateData['currentLng'] = lng;
+        if (lat != 0.0 && lng != 0.0) {
+          updateData['geohash'] = GeohashUtil.encode(lat, lng, precision: 6);
+        }
+      } else if (newStatus && driverModel.value != null) {
         final lat = driverModel.value!.currentLat;
         final lng = driverModel.value!.currentLng;
         if (lat != 0.0 && lng != 0.0) {
@@ -168,7 +290,8 @@ class DriverDashboardController {
 
     // Kiểm tra tài xế không đang bận chuyến khác
     if (driver.isBusy) {
-      errorMessage.value = 'Bạn đang thực hiện chuyến khác, không thể nhận thêm.';
+      errorMessage.value =
+          'Bạn đang thực hiện chuyến khác, không thể nhận thêm.';
       return false;
     }
 
@@ -211,7 +334,8 @@ class DriverDashboardController {
     final user = userModel.value;
 
     if (driver.isBusy) {
-      errorMessage.value = 'Bạn đang thực hiện chuyến khác, không thể nhận thêm.';
+      errorMessage.value =
+          'Bạn đang thực hiện chuyến khác, không thể nhận thêm.';
       return false;
     }
 
@@ -258,8 +382,9 @@ class DriverDashboardController {
         'geohash': GeohashUtil.encode(lat, lng, precision: 6),
         'lastActiveAt': FieldValue.serverTimestamp(),
       });
-    } catch (_) {
-      // Lỗi GPS không critical — bỏ qua để không crash app
+    } catch (error) {
+      debugPrint('Không thể đồng bộ vị trí tài xế: $error');
+      errorMessage.value = 'Không thể đồng bộ vị trí tài xế. Vui lòng thử lại.';
     }
   }
 
@@ -274,6 +399,9 @@ class DriverDashboardController {
     isOnline.dispose();
     pendingRides.dispose();
     pendingDeliveries.dispose();
+    availableRides.dispose();
+    availableDeliveries.dispose();
+    isSearchingOrders.dispose();
     errorMessage.dispose();
   }
 }

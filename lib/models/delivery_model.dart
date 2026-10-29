@@ -25,10 +25,13 @@ class DeliveryModel {
   final String pickupGeohash; // Mã Geohash điểm lấy hàng
   final double distanceKm; // Quãng đường giao hàng (km)
   final double price; // Cước tiền mặt cố định (VNĐ)
+  final double codAmount; // Tiền thu hộ COD (VNĐ)
   final String paymentMethod; // Phương thức thanh toán (mặc định: CASH)
   final String? routePolyline; // Tọa độ tuyến đường chỉ dẫn
-  final String? handoverOtp; // Mã OTP 4 số bảo mật do hệ thống sinh cho Người nhận
-  final String? podPhotoUrl; // Ảnh chụp gói hàng tại nơi giao (Proof of Delivery)
+  final String?
+  handoverOtp; // Mã OTP 4 số bảo mật do hệ thống sinh cho Người nhận
+  final String?
+  podPhotoUrl; // Ảnh chụp gói hàng tại nơi giao (Proof of Delivery)
   final DeliveryStatus status; // Trạng thái chu trình giao hàng
   final String? cancelReason; // Lý do hủy đơn
   final String? cancelledBy; // customer | driver | system
@@ -60,6 +63,7 @@ class DeliveryModel {
     required this.pickupGeohash,
     required this.distanceKm,
     required this.price,
+    this.codAmount = 0,
     this.paymentMethod = 'CASH',
     this.routePolyline,
     this.handoverOtp,
@@ -98,6 +102,7 @@ class DeliveryModel {
       pickupGeohash: data['pickupGeohash'] as String? ?? '',
       distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 0.0,
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
+      codAmount: (data['codAmount'] as num?)?.toDouble() ?? 0.0,
       paymentMethod: data['paymentMethod'] as String? ?? 'CASH',
       routePolyline: data['routePolyline'] as String?,
       handoverOtp: data['handoverOtp'] as String?,
@@ -135,6 +140,7 @@ class DeliveryModel {
       'pickupGeohash': pickupGeohash,
       'distanceKm': distanceKm,
       'price': price,
+      'codAmount': codAmount,
       'paymentMethod': paymentMethod,
       'routePolyline': routePolyline,
       'handoverOtp': handoverOtp,
@@ -146,7 +152,9 @@ class DeliveryModel {
       'reviewComment': reviewComment,
       'createdAt': Timestamp.fromDate(createdAt),
       'acceptedAt': acceptedAt != null ? Timestamp.fromDate(acceptedAt!) : null,
-      'deliveredAt': deliveredAt != null ? Timestamp.fromDate(deliveredAt!) : null,
+      'deliveredAt': deliveredAt != null
+          ? Timestamp.fromDate(deliveredAt!)
+          : null,
     };
   }
 
@@ -187,6 +195,7 @@ class DeliveryModel {
       pickupGeohash: pickupGeohash,
       distanceKm: distanceKm,
       price: price,
+      codAmount: codAmount,
       paymentMethod: paymentMethod,
       routePolyline: routePolyline,
       handoverOtp: handoverOtp ?? this.handoverOtp,

@@ -13,8 +13,6 @@ import '../modules/driver/screens/driver_dashboard_screen.dart';
 import '../modules/driver/screens/driver_trip_screen.dart';
 import '../modules/driver/screens/driver_income_screen.dart';
 
-
-
 /// Danh mục tên các đường dẫn (Route Names) toàn hệ thống JetPost
 /// Phục vụ cơ chế điều phối Cổng vào (Welcome Gate) và phân quyền Role Guard
 class AppRoutes {
@@ -58,17 +56,24 @@ class AppRoutes {
 
   /// Đăng ký danh sách các routes cố định của ứng dụng
   static Map<String, WidgetBuilder> get routes => {
-        welcomeGate: (context) => const WelcomeGateScreen(),
-        phoneAuth: (context) => const PhoneAuthScreen(),
-        driverKyc: (context) => const DriverEkycScreen(),
-        kycPending: (context) => const KycPendingScreen(),
-        userProfile: (context) => const UserProfileScreen(),
-        appSettings: (context) => const AppSettingsScreen(),
-        messagesInbox: (context) => const MessagesInboxScreen(),
-        driverDashboard: (context) => const DriverDashboardScreen(),
-        driverTrip: (context) => const DriverTripScreen(),
-        driverIncome: (context) => const DriverIncomeScreen(),
-      };
+    welcomeGate: (context) => const WelcomeGateScreen(),
+    phoneAuth: (context) => const PhoneAuthScreen(),
+    driverKyc: (context) => const DriverEkycScreen(),
+    kycPending: (context) => const KycPendingScreen(),
+    userProfile: (context) => const UserProfileScreen(),
+    appSettings: (context) => const AppSettingsScreen(),
+    messagesInbox: (context) => const MessagesInboxScreen(),
+    driverDashboard: (context) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return DriverDashboardScreen(
+        suppressActiveTripRedirect:
+            args?['suppressActiveTripRedirect'] as bool? ?? false,
+      );
+    },
+    driverTrip: (context) => const DriverTripScreen(),
+    driverIncome: (context) => const DriverIncomeScreen(),
+  };
 
   /// Bộ xử lý chuyển hướng động (onGenerateRoute)
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
@@ -94,9 +99,7 @@ class AppRoutes {
       );
     }
     if (settings.name == linkEmail) {
-      return MaterialPageRoute(
-        builder: (_) => const LinkEmailScreen(),
-      );
+      return MaterialPageRoute(builder: (_) => const LinkEmailScreen());
     }
     return null;
   }
@@ -106,9 +109,7 @@ class AppRoutes {
     return MaterialPageRoute(
       builder: (_) => Scaffold(
         appBar: AppBar(title: const Text('Không tìm thấy trang')),
-        body: Center(
-          child: Text('Trang ${settings.name} chưa được cấu hình!'),
-        ),
+        body: Center(child: Text('Trang ${settings.name} chưa được cấu hình!')),
       ),
     );
   }

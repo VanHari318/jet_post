@@ -1,8 +1,10 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'routes/app_routes.dart';
+import 'modules/driver/screens/driver_dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +36,17 @@ class JetPostApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme,
           themeMode: currentMode,
           initialRoute: AppRoutes.welcomeGate,
+          // Tạm vào thẳng phân hệ tài xế khi phát triển; bản release vẫn qua cổng đăng nhập.
+          onGenerateInitialRoutes: kDebugMode
+              ? (_) => <Route<dynamic>>[
+                    MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: AppRoutes.driverDashboard,
+                      ),
+                      builder: (_) => const DriverDashboardScreen(),
+                    ),
+                  ]
+              : null,
           routes: AppRoutes.routes,
           onGenerateRoute: AppRoutes.onGenerateRoute,
           onUnknownRoute: AppRoutes.onUnknownRoute,
