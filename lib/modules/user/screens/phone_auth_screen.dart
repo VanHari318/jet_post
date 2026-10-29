@@ -408,7 +408,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.welcomeGate, (route) => false);
       }
     } else if (user.role == UserRole.admin) {
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.adminDashboard, (route) => false);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.adminDashboard,
+        (route) => false,
+        arguments: {'adminUser': user},
+      );
     } else {
       if (widget.targetRole == UserRole.driver) {
         final driver = await UserService.instance.getDriverProfile(user.id);

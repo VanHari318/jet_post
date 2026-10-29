@@ -1,4 +1,14 @@
 import 'package:flutter/material.dart';
+import '../models/user_model.dart';
+import '../modules/admin/screens/admin_analytics_screen.dart';
+import '../modules/admin/screens/admin_broadcast_screen.dart';
+import '../modules/admin/screens/admin_dashboard_screen.dart';
+import '../modules/admin/screens/admin_dispute_screen.dart';
+import '../modules/admin/screens/admin_kyc_review_screen.dart';
+import '../modules/admin/screens/admin_login_screen.dart';
+import '../modules/admin/screens/admin_pricing_screen.dart';
+import '../modules/admin/screens/admin_radar_screen.dart';
+import '../modules/admin/screens/admin_user_management_screen.dart';
 import '../modules/user/screens/app_settings_screen.dart';
 import '../modules/user/screens/change_phone_screen.dart';
 import '../modules/user/screens/direct_chat_screen.dart';
@@ -47,12 +57,15 @@ class AppRoutes {
   static const String linkEmail = '/user/link-email';
 
   // [Phân hệ 4 - Thành viên 4] Quản trị Điều hành & Radar
+  static const String adminLogin = '/admin/login';
   static const String adminDashboard = '/admin/dashboard';
   static const String adminRadarMap = '/admin/radar-map';
   static const String adminKycApproval = '/admin/kyc-approval';
   static const String adminUsersManagement = '/admin/users-management';
+  static const String adminDisputeManagement = '/admin/dispute-management';
   static const String adminPricingConfig = '/admin/pricing-config';
   static const String adminAnalytics = '/admin/analytics';
+  static const String adminBroadcast = '/admin/broadcast';
 
   /// Đăng ký danh sách các routes cố định của ứng dụng
   static Map<String, WidgetBuilder> get routes => {
@@ -73,10 +86,45 @@ class AppRoutes {
     },
     driverTrip: (context) => const DriverTripScreen(),
     driverIncome: (context) => const DriverIncomeScreen(),
+    adminLogin: (context) => const AdminLoginScreen(),
+    adminKycApproval: (context) => const AdminKycReviewScreen(),
+    adminUsersManagement: (context) => const AdminUserManagementScreen(),
+    adminDisputeManagement: (context) => const AdminDisputeScreen(),
+    adminAnalytics: (context) => const AdminAnalyticsScreen(),
   };
 
   /// Bộ xử lý chuyển hướng động (onGenerateRoute)
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
+    if (settings.name == adminDashboard) {
+      final adminUser = _extractAdminUser(settings.arguments);
+      if (adminUser == null) {
+        return MaterialPageRoute(builder: (_) => const AdminLoginScreen());
+      }
+      return MaterialPageRoute(
+        builder: (_) => AdminDashboardScreen(adminUser: adminUser),
+      );
+    }
+    if (settings.name == adminRadarMap) {
+      final adminUser = _extractAdminUser(settings.arguments);
+      if (adminUser == null) {
+        return MaterialPageRoute(builder: (_) => const AdminLoginScreen());
+      }
+      return MaterialPageRoute(
+        builder: (_) => AdminRadarScreen(adminUser: adminUser),
+      );
+    }
+    if (settings.name == adminPricingConfig) {
+      final adminId = _extractAdminId(settings.arguments);
+      return MaterialPageRoute(
+        builder: (_) => AdminPricingScreen(adminId: adminId),
+      );
+    }
+    if (settings.name == adminBroadcast) {
+      final adminId = _extractAdminId(settings.arguments);
+      return MaterialPageRoute(
+        builder: (_) => AdminBroadcastScreen(adminId: adminId),
+      );
+    }
     if (settings.name == directChat) {
       final args = settings.arguments as Map<String, dynamic>? ?? {};
       return MaterialPageRoute(
@@ -102,6 +150,36 @@ class AppRoutes {
       return MaterialPageRoute(builder: (_) => const LinkEmailScreen());
     }
     return null;
+  }
+
+  static UserModel? _extractAdminUser(Object? args) {
+    if (args is UserModel) {
+      return args;
+    }
+    if (args is Map<String, dynamic>) {
+      final candidate = args['adminUser'];
+      if (candidate is UserModel) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  static String _extractAdminId(Object? args) {
+    if (args is String && args.isNotEmpty) {
+      return args;
+    }
+    if (args is Map<String, dynamic>) {
+      final candidate = args['adminId'];
+      if (candidate is String && candidate.isNotEmpty) {
+        return candidate;
+      }
+      final adminUser = args['adminUser'];
+      if (adminUser is UserModel && adminUser.id.isNotEmpty) {
+        return adminUser.id;
+      }
+    }
+    return 'admin_demo_001';
   }
 
   /// Bộ xử lý chuyển hướng dự phòng nếu route không tồn tại

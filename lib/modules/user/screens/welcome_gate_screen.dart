@@ -403,7 +403,7 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                 color: const Color(0xFF1E88E5),
                 icon: Icons.admin_panel_settings,
                 onTap: () {
-                  _navigateToRole(AppRoutes.adminDashboard, UserRole.admin);
+                  Navigator.pushNamed(context, AppRoutes.adminLogin);
                 },
               ),
 

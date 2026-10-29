@@ -302,10 +302,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                               'Settings',
                               'Demo Role Switcher ➔ Admin',
                             );
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.adminDashboard,
-                            );
+                            Navigator.pushNamed(context, AppRoutes.adminLogin);
                           },
                           child: const Text(
                             'Admin',
