@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../models/driver_model.dart';
 import '../../../models/user_model.dart';
@@ -8,6 +10,7 @@ import '../widgets/admin_widgets.dart';
 
 /// Task 4.2 - Bàn cờ Điều hành Radar Thời gian thực (Live Dispatcher Map)
 /// Giám sát trực tiếp mật độ tài xế Online (Xanh) và Đang giao/chở khách (Đỏ) toàn thành phố
+/// trên nền bản đồ đường phố thực tế OpenStreetMap (FlutterMap)
 class AdminRadarScreen extends StatefulWidget {
   final UserModel adminUser;
 
@@ -17,37 +20,88 @@ class AdminRadarScreen extends StatefulWidget {
   State<AdminRadarScreen> createState() => _AdminRadarScreenState();
 }
 
-class _AdminRadarScreenState extends State<AdminRadarScreen>
-    with SingleTickerProviderStateMixin {
+class _AdminRadarScreenState extends State<AdminRadarScreen> {
   final _controller = AdminController();
+  final MapController _mapController = MapController();
+
   DriverModel? _selectedDriver;
   UserModel? _selectedDriverUser;
   bool _showOnlyOnline = true;
-  late AnimationController _sweepCtrl;
+  bool _mapReady = false;
+  double _currentZoom = 14.2;
 
-  @override
-  void initState() {
-    super.initState();
-    _sweepCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
-  }
+  // Tâm bản đồ mặc định: Khu vực Đống Đa / ĐH Thủy Lợi (21.0074, 105.8247)
+  static const LatLng _defaultCenter = LatLng(21.0074, 105.8247);
 
   @override
   void dispose() {
-    _sweepCtrl.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
-  Future<void> _onSelectDriver(DriverModel driver) async {
+  /// Lấy tọa độ hiển thị trên bản đồ cho tài xế (dùng tọa độ thật, hoặc phân bổ quanh tâm nếu chưa có GPS)
+  LatLng _resolveDriverPosition(DriverModel drv, int index) {
+    if (drv.currentLat != 0 && drv.currentLng != 0) {
+      return LatLng(drv.currentLat, drv.currentLng);
+    }
+    final angle = (index * 1.7) % (2 * math.pi);
+    final radiusDeg = 0.004 + (index % 3) * 0.003;
+    return LatLng(
+      _defaultCenter.latitude + radiusDeg * math.sin(angle),
+      _defaultCenter.longitude + radiusDeg * math.cos(angle),
+    );
+  }
+
+  Future<void> _onSelectDriver(DriverModel driver, [int index = 0]) async {
     setState(() {
       _selectedDriver = driver;
       _selectedDriverUser = null;
     });
+
+    if (_mapReady) {
+      final targetPos = _resolveDriverPosition(driver, index);
+      _currentZoom = math.max(_currentZoom, 15.5);
+      _mapController.move(targetPos, _currentZoom);
+    }
+
     final userInfo = await _controller.getUserByDriverId(driver.id);
     if (!mounted) return;
     setState(() => _selectedDriverUser = userInfo);
+  }
+
+  void _fitAllDrivers(List<DriverModel> drivers) {
+    if (!_mapReady) return;
+    if (drivers.isEmpty) {
+      _currentZoom = 14.2;
+      _mapController.move(_defaultCenter, _currentZoom);
+      return;
+    }
+    if (drivers.length == 1) {
+      final pos = _resolveDriverPosition(drivers.first, 0);
+      _currentZoom = 15.0;
+      _mapController.move(pos, _currentZoom);
+      return;
+    }
+    final points = drivers
+        .asMap()
+        .entries
+        .map((e) => _resolveDriverPosition(e.value, e.key))
+        .toList();
+    final bounds = LatLngBounds.fromPoints(points);
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(48),
+        maxZoom: 16,
+      ),
+    );
+  }
+
+  void _zoomBy(double delta) {
+    if (!_mapReady) return;
+    final camera = _mapController.camera;
+    _currentZoom = (camera.zoom + delta).clamp(5.0, 18.5);
+    _mapController.move(camera.center, _currentZoom);
   }
 
   @override
@@ -86,14 +140,24 @@ class _AdminRadarScreenState extends State<AdminRadarScreen>
 
           return Column(
             children: [
-              // Bản đồ Radar Điều hành Tương tác (Task 4.2)
+              // Bản đồ OpenStreetMap Radar Điều hành Tương tác (Task 4.2)
               _InteractiveRadarMap(
+                mapController: _mapController,
                 drivers: drivers,
                 selectedDriver: _selectedDriver,
-                sweepAnimation: _sweepCtrl,
                 onlineReadyCount: onlineReadyCount,
                 busyCount: busyCount,
+                resolvePosition: _resolveDriverPosition,
+                onMapReady: () {
+                  _mapReady = true;
+                  if (drivers.isNotEmpty) {
+                    _fitAllDrivers(drivers);
+                  }
+                },
                 onTapDriver: _onSelectDriver,
+                onFitAll: () => _fitAllDrivers(drivers),
+                onZoomIn: () => _zoomBy(1.0),
+                onZoomOut: () => _zoomBy(-1.0),
               ),
 
               // Thẻ thông tin chi tiết khi Admin chạm vào Marker hoặc dòng tài xế
@@ -138,11 +202,27 @@ class _AdminRadarScreenState extends State<AdminRadarScreen>
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      '${drivers.length} tài xế trên bản đồ ($onlineReadyCount sẵn sàng, $busyCount đang chạy)',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
+                                    Expanded(
+                                      child: Text(
+                                        '${drivers.length} tài xế trên bản đồ ($onlineReadyCount sẵn sàng, $busyCount đang chạy)',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => _fitAllDrivers(drivers),
+                                      icon: const Icon(
+                                        Icons.center_focus_strong,
+                                        size: 16,
+                                      ),
+                                      label: const Text(
+                                        'Toàn cảnh',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
                                       ),
                                     ),
                                   ],
@@ -158,7 +238,8 @@ class _AdminRadarScreenState extends State<AdminRadarScreen>
                                     return _DriverRadarListTile(
                                       driver: driver,
                                       isSelected: isSelected,
-                                      onTap: () => _onSelectDriver(driver),
+                                      onTap: () =>
+                                          _onSelectDriver(driver, index),
                                     );
                                   },
                                 ),
@@ -175,187 +256,282 @@ class _AdminRadarScreenState extends State<AdminRadarScreen>
 }
 
 class _InteractiveRadarMap extends StatelessWidget {
+  final MapController mapController;
   final List<DriverModel> drivers;
   final DriverModel? selectedDriver;
-  final Animation<double> sweepAnimation;
   final int onlineReadyCount;
   final int busyCount;
-  final ValueChanged<DriverModel> onTapDriver;
+  final LatLng Function(DriverModel, int) resolvePosition;
+  final VoidCallback onMapReady;
+  final void Function(DriverModel, int) onTapDriver;
+  final VoidCallback onFitAll;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
 
   const _InteractiveRadarMap({
+    required this.mapController,
     required this.drivers,
     required this.selectedDriver,
-    required this.sweepAnimation,
     required this.onlineReadyCount,
     required this.busyCount,
+    required this.resolvePosition,
+    required this.onMapReady,
     required this.onTapDriver,
+    required this.onFitAll,
+    required this.onZoomIn,
+    required this.onZoomOut,
   });
 
   // Tâm bản đồ mặc định: Khu vực Đống Đa / ĐH Thủy Lợi (21.0074, 105.8247)
-  static const double _centerLat = 21.0074;
-  static const double _centerLng = 105.8247;
-  static const double _spanDeg = 0.025; // Bán kính hiển thị ~2.5km mỗi chiều
+  static const LatLng _defaultCenter = LatLng(21.0074, 105.8247);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 230,
+      height: 280,
       margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF141E2B),
+        color: Colors.grey.shade200,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderDark, width: 1.5),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final h = constraints.maxHeight;
-
-          return Stack(
+      child: Stack(
+        children: [
+          // 1. Bản đồ đường phố thực tế OpenStreetMap
+          FlutterMap(
+            mapController: mapController,
+            options: MapOptions(
+              initialCenter: _defaultCenter,
+              initialZoom: 14.2,
+              onMapReady: onMapReady,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all,
+              ),
+            ),
             children: [
-              // 1. Lưới bản đồ & Vòng quét Radar
-              AnimatedBuilder(
-                animation: sweepAnimation,
-                builder: (context, _) {
-                  return CustomPaint(
-                    size: Size(w, h),
-                    painter: _RadarGridPainter(
-                      sweepAngle: sweepAnimation.value * 2 * math.pi,
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                fallbackUrl: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.jet_post',
+                maxZoom: 19,
+              ),
+
+              // Vòng phủ sóng Radar trung tâm (Bán kính 2.5km quanh tâm điều hành)
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: _defaultCenter,
+                    radius: 2500,
+                    useRadiusInMeter: true,
+                    color: AppColors.primary.withValues(alpha: 0.07),
+                    borderColor: AppColors.primary.withValues(alpha: 0.35),
+                    borderStrokeWidth: 1.5,
+                  ),
+                ],
+              ),
+
+              // 2. Các Marker xe máy gắn đúng tọa độ GPS trên bản đồ
+              MarkerLayer(
+                markers: drivers.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final drv = entry.value;
+                  final pos = resolvePosition(drv, idx);
+                  final isSelected = selectedDriver?.id == drv.id;
+                  final markerColor = drv.isBusy
+                      ? AppColors.driverBusy
+                      : (drv.isOnline
+                          ? AppColors.driverOnline
+                          : AppColors.textMutedLight);
+
+                  return Marker(
+                    point: pos,
+                    width: 86,
+                    height: 64,
+                    child: GestureDetector(
+                      onTap: () => onTapDriver(drv, idx),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isSelected ? markerColor : Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: markerColor,
+                                width: isSelected ? 3.0 : 2.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: markerColor.withValues(alpha: 0.45),
+                                  blurRadius: isSelected ? 12 : 6,
+                                  spreadRadius: isSelected ? 2 : 0,
+                                ),
+                              ],
+                            ),
+                            child: Transform.rotate(
+                              angle: (drv.heading * math.pi) / 180,
+                              child: Icon(
+                                Icons.two_wheeler,
+                                size: isSelected ? 20 : 16,
+                                color: isSelected ? Colors.white : markerColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? markerColor
+                                  : Colors.black.withValues(alpha: 0.78),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              drv.plateNumber,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
-                },
+                }).toList(),
               ),
-
-              // 2. Nhãn địa danh nền bản đồ Hà Nội
-              const Positioned(
-                left: 14,
-                bottom: 10,
-                child: Text(
-                  '📍 Tâm Radar: Đống Đa - ĐH Thủy Lợi (21.0074, 105.8247)',
-                  style: TextStyle(color: Colors.white54, fontSize: 10.5),
-                ),
-              ),
-
-              // 3. Chú thích màu sắc Marker (Legend)
-              Positioned(
-                left: 12,
-                top: 10,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LegendDot(
-                        color: AppColors.driverOnline,
-                        label: 'Sẵn sàng ($onlineReadyCount)',
-                      ),
-                      const SizedBox(width: 12),
-                      _LegendDot(
-                        color: AppColors.driverBusy,
-                        label: 'Đang chạy ($busyCount)',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 4. Các Marker xe máy tương tác trên bản đồ
-              ...drivers.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final drv = entry.value;
-                final pos = _projectToCanvas(drv, idx, w, h);
-                final isSelected = selectedDriver?.id == drv.id;
-                final markerColor = drv.isBusy
-                    ? AppColors.driverBusy
-                    : (drv.isOnline
-                        ? AppColors.driverOnline
-                        : AppColors.textMutedLight);
-
-                return Positioned(
-                  left: (pos.dx - 24).clamp(6.0, w - 54.0),
-                  top: (pos.dy - 24).clamp(32.0, h - 52.0),
-                  child: GestureDetector(
-                    onTap: () => onTapDriver(drv),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: markerColor.withValues(
-                                alpha: isSelected ? 0.95 : 0.25),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected ? Colors.white : markerColor,
-                              width: isSelected ? 2.5 : 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: markerColor.withValues(alpha: 0.5),
-                                blurRadius: isSelected ? 12 : 6,
-                              ),
-                            ],
-                          ),
-                          child: Transform.rotate(
-                            angle: (drv.heading * math.pi) / 180,
-                            child: Icon(
-                              Icons.two_wheeler,
-                              size: isSelected ? 20 : 16,
-                              color: isSelected ? Colors.white : markerColor,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            drv.plateNumber,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
             ],
-          );
-        },
+          ),
+
+          // 3. Chú thích màu sắc Marker (Legend) góc trên trái
+          Positioned(
+            left: 10,
+            top: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _LegendDot(
+                    color: AppColors.driverOnline,
+                    label: 'Sẵn sàng ($onlineReadyCount)',
+                  ),
+                  const SizedBox(width: 12),
+                  _LegendDot(
+                    color: AppColors.driverBusy,
+                    label: 'Đang chạy ($busyCount)',
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 4. Cụm nút điều khiển Zoom +/- và căn tâm bản đồ góc phải
+          Positioned(
+            right: 10,
+            top: 10,
+            child: Column(
+              children: [
+                _MapActionButton(
+                  icon: Icons.add,
+                  tooltip: 'Phóng to',
+                  onTap: onZoomIn,
+                ),
+                const SizedBox(height: 6),
+                _MapActionButton(
+                  icon: Icons.remove,
+                  tooltip: 'Thu nhỏ',
+                  onTap: onZoomOut,
+                ),
+                const SizedBox(height: 6),
+                _MapActionButton(
+                  icon: Icons.my_location,
+                  tooltip: 'Căn toàn bộ tài xế',
+                  onTap: onFitAll,
+                ),
+              ],
+            ),
+          ),
+
+          // 5. Nhãn địa danh nền bản đồ Hà Nội góc dưới trái
+          Positioned(
+            left: 10,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                '📍 OpenStreetMap • Tâm Radar: Đống Đa - ĐH Thủy Lợi',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
 
-  Offset _projectToCanvas(DriverModel drv, int index, double w, double h) {
-    if (drv.currentLat == 0 && drv.currentLng == 0) {
-      // Nếu tài xế chưa phát GPS thực tế, phân bổ quanh tâm radar để vẫn bấm chọn được
-      final angle = (index * 1.7) % (2 * math.pi);
-      final radius = 35.0 + (index % 3) * 22.0;
-      return Offset(
-        w / 2 + radius * math.cos(angle),
-        h / 2 + radius * math.sin(angle),
-      );
-    }
-    final normX = ((drv.currentLng - _centerLng) / _spanDeg).clamp(-0.85, 0.85);
-    final normY = ((_centerLat - drv.currentLat) / _spanDeg).clamp(-0.75, 0.75);
-    return Offset(
-      w / 2 + normX * (w * 0.42),
-      h / 2 + normY * (h * 0.38),
+class _MapActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _MapActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.92),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
+      ),
+      elevation: 2,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Tooltip(
+          message: tooltip,
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(icon, size: 18, color: AppColors.primaryDark),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -388,66 +564,6 @@ class _LegendDot extends StatelessWidget {
       ],
     );
   }
-}
-
-class _RadarGridPainter extends CustomPainter {
-  final double sweepAngle;
-
-  _RadarGridPainter({required this.sweepAngle});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.08)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    for (double y = 0; y < size.height; y += 28) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-    for (double x = 0; x < size.width; x += 28) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final circlePaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.18)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    for (final r in [35.0, 70.0, 105.0]) {
-      canvas.drawCircle(center, r, circlePaint);
-    }
-
-    final centerPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.25)
-      ..strokeWidth = 1;
-    canvas.drawLine(
-      Offset(center.dx, 0),
-      Offset(center.dx, size.height),
-      centerPaint,
-    );
-    canvas.drawLine(
-      Offset(0, center.dy),
-      Offset(size.width, center.dy),
-      centerPaint,
-    );
-
-    // Tia quét Radar
-    final sweepRadius = math.min(size.width, size.height) * 0.48;
-    final sweepEnd = Offset(
-      center.dx + sweepRadius * math.cos(sweepAngle),
-      center.dy + sweepRadius * math.sin(sweepAngle),
-    );
-    final sweepPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.45)
-      ..strokeWidth = 2;
-    canvas.drawLine(center, sweepEnd, sweepPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _RadarGridPainter oldDelegate) =>
-      oldDelegate.sweepAngle != sweepAngle;
 }
 
 class _DriverRadarListTile extends StatelessWidget {
@@ -548,7 +664,7 @@ class _EmptyRadar extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               isOnline
-                  ? 'Chưa có tài xế nào đang bật Online'
+                   ? 'Chưa có tài xế nào đang bật Online'
                   : 'Chưa có tài xế nào đang hoạt động',
               style: const TextStyle(
                 fontSize: 15,
