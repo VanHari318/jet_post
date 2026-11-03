@@ -239,7 +239,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 1.3,
+                    childAspectRatio: 1.18,
                     children: [
                       AdminStatCard(
                         title: 'Tổng doanh thu',

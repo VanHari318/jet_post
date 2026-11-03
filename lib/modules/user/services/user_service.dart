@@ -727,11 +727,9 @@ class UserService {
   // 3. QUẢN LÝ HỒ SƠ CÁ NHÂN (USER PROFILE)
   // ===========================================================================
 
-  /// Lấy thông tin hồ sơ của người dùng hiện tại
-  Future<UserModel?> getCurrentUserProfile() async {
-    final uid = FirebaseService.currentUserId;
-    if (uid == null) return null;
-
+  /// Lấy thông tin hồ sơ của người dùng theo UID
+  Future<UserModel?> getUserProfile(String uid) async {
+    if (uid.isEmpty) return null;
     try {
       final doc = await FirebaseService.firestore
           .collection(FirebaseService.colUsers)
@@ -741,9 +739,16 @@ class UserService {
       if (!doc.exists) return null;
       return UserModel.fromFirestore(doc);
     } catch (e) {
-      debugPrint('[UserService] Lỗi đọc profile: $e');
+      AppLogger.error('UserService', 'Lỗi đọc profile cho UID: $uid', e);
       return null;
     }
+  }
+
+  /// Lấy thông tin hồ sơ của người dùng hiện tại
+  Future<UserModel?> getCurrentUserProfile() async {
+    final uid = FirebaseService.currentUserId;
+    if (uid == null) return null;
+    return getUserProfile(uid);
   }
 
   /// Cập nhật Họ và Tên hoặc Ảnh đại diện

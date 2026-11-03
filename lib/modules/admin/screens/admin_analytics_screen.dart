@@ -215,7 +215,7 @@ Kỳ báo cáo: $_selectedPeriod (${_fromDate.day}/${_fromDate.month}/${_fromDat
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: 1.2,
+              childAspectRatio: 1.18,
               children: [
                 AdminStatCard(
                   title: 'Tổng doanh thu',

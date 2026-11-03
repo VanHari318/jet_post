@@ -168,6 +168,86 @@ class AppDialogs {
     );
   }
 
+  /// Hiển thị Popup Cảnh Báo / Nhắc Nhở (Warning Dialog)
+  static Future<void> showWarning(
+    BuildContext context, {
+    String title = 'Cảnh Báo',
+    required String message,
+    String buttonText = 'Đã hiểu',
+    VoidCallback? onDismissed,
+  }) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+        contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withAlpha(25),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.warning,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.45,
+            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+          ),
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.warning,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                onDismissed?.call();
+              },
+              child: Text(
+                buttonText,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Hiển thị Popup Xác nhận Thao tác (Confirm Dialog)
   static Future<bool> showConfirm(
     BuildContext context, {

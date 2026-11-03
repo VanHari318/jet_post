@@ -21,7 +21,7 @@ class AdminStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
@@ -44,21 +44,21 @@ class AdminStatCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 19),
               ),
               const Spacer(),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           isLoading
               ? Container(
                   width: 80,
-                  height: 24,
+                  height: 22,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(6),
@@ -70,7 +70,7 @@ class AdminStatCard extends StatelessWidget {
                   child: Text(
                     value,
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 21,
                       fontWeight: FontWeight.w800,
                       color: color,
                     ),
@@ -78,14 +78,15 @@ class AdminStatCard extends StatelessWidget {
                 ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                   color: Theme.of(context).textTheme.bodySmall?.color,
                 ),
               ),
@@ -95,7 +96,7 @@ class AdminStatCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style:
-                      const TextStyle(fontSize: 11, color: Color(0xFF98A2B3)),
+                      const TextStyle(fontSize: 10.5, color: Color(0xFF98A2B3)),
                 ),
             ],
           ),

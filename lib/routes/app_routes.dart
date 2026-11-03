@@ -22,6 +22,13 @@ import '../modules/user/screens/welcome_gate_screen.dart';
 import '../modules/driver/screens/driver_dashboard_screen.dart';
 import '../modules/driver/screens/driver_trip_screen.dart';
 import '../modules/driver/screens/driver_income_screen.dart';
+import '../modules/customer/screens/customer_home_screen.dart';
+import '../modules/customer/screens/ride_booking_screen.dart';
+import '../modules/customer/screens/delivery_booking_screen.dart';
+import '../modules/customer/screens/live_tracking_screen.dart';
+import '../modules/customer/screens/consignee_tracking_screen.dart';
+import '../modules/customer/screens/customer_activity_screen.dart';
+import '../modules/customer/screens/saved_addresses_screen.dart';
 
 /// Danh mục tên các đường dẫn (Route Names) toàn hệ thống JetPost
 /// Phục vụ cơ chế điều phối Cổng vào (Welcome Gate) và phân quyền Role Guard
@@ -70,6 +77,12 @@ class AppRoutes {
   /// Đăng ký danh sách các routes cố định của ứng dụng
   static Map<String, WidgetBuilder> get routes => {
     welcomeGate: (context) => const WelcomeGateScreen(),
+    customerHome: (context) => const CustomerHomeScreen(),
+    rideBooking: (context) => const RideBookingScreen(),
+    deliveryBooking: (context) => const DeliveryBookingScreen(),
+    consigneeTracking: (context) => const ConsigneeTrackingScreen(),
+    customerActivity: (context) => const CustomerActivityScreen(),
+    savedAddresses: (context) => const SavedAddressesScreen(),
     phoneAuth: (context) => const PhoneAuthScreen(),
     driverKyc: (context) => const DriverEkycScreen(),
     kycPending: (context) => const KycPendingScreen(),
@@ -148,6 +161,20 @@ class AppRoutes {
     }
     if (settings.name == linkEmail) {
       return MaterialPageRoute(builder: (_) => const LinkEmailScreen());
+    }
+    if (settings.name == liveTracking) {
+      final args = settings.arguments as Map<String, dynamic>? ?? {};
+      final rideId = args['rideId'] as String?;
+      final deliveryId = args['deliveryId'] as String?;
+      if (rideId != null && rideId.isNotEmpty) {
+        return MaterialPageRoute(
+          builder: (_) => LiveTrackingScreen.ride(rideId: rideId),
+        );
+      } else if (deliveryId != null && deliveryId.isNotEmpty) {
+        return MaterialPageRoute(
+          builder: (_) => LiveTrackingScreen.delivery(deliveryId: deliveryId),
+        );
+      }
     }
     return null;
   }
