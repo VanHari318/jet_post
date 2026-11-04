@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../models/delivery_model.dart';
 import '../../../models/ride_model.dart';
@@ -139,6 +140,16 @@ class _IncomingOrderSheetState extends State<IncomingOrderSheet>
   }
 
   bool get _isRide => widget.ride != null;
+
+  /// Mở Google Maps chỉ đường đến địa chỉ theo tọa độ lat/lng
+  Future<void> _openGoogleMaps(double lat, double lng, String label) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -329,18 +340,24 @@ class _IncomingOrderSheetState extends State<IncomingOrderSheet>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoLine(
+        _AddressLine(
           icon: Icons.location_on_rounded,
           color: AppColors.primary,
           label: 'Điểm đón',
           value: ride.pickupAddress,
+          lat: ride.pickupLat,
+          lng: ride.pickupLng,
+          onOpenMap: _openGoogleMaps,
         ),
         const SizedBox(height: 10),
-        _InfoLine(
+        _AddressLine(
           icon: Icons.flag_rounded,
           color: AppColors.secondary,
           label: 'Điểm đến',
           value: ride.dropoffAddress,
+          lat: ride.dropoffLat,
+          lng: ride.dropoffLng,
+          onOpenMap: _openGoogleMaps,
         ),
         const SizedBox(height: 14),
         Row(
@@ -374,25 +391,35 @@ class _IncomingOrderSheetState extends State<IncomingOrderSheet>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoLine(
+        _AddressLine(
           icon: Icons.location_on_rounded,
           color: AppColors.primary,
           label: 'Lấy hàng',
           value: delivery.pickupAddress,
+          lat: delivery.pickupLat,
+          lng: delivery.pickupLng,
+          onOpenMap: _openGoogleMaps,
         ),
         const SizedBox(height: 10),
-        _InfoLine(
+        _AddressLine(
           icon: Icons.flag_rounded,
           color: AppColors.secondary,
           label: 'Giao đến',
           value: delivery.dropoffAddress,
+          lat: delivery.dropoffLat,
+          lng: delivery.dropoffLng,
+          onOpenMap: _openGoogleMaps,
         ),
         const SizedBox(height: 10),
-        _InfoLine(
+        _AddressLine(
           icon: Icons.inventory_2_outlined,
           color: AppColors.accent,
           label: 'Loại hàng',
           value: delivery.packageType,
+          // Không có map link cho loại hàng
+          lat: null,
+          lng: null,
+          onOpenMap: _openGoogleMaps,
         ),
         const SizedBox(height: 14),
         Row(
@@ -427,18 +454,27 @@ class _IncomingOrderSheetState extends State<IncomingOrderSheet>
   }
 }
 
-class _InfoLine extends StatelessWidget {
+/// Widget hiển thị dòng địa chỉ có nút mở Google Maps
+class _AddressLine extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String label;
   final String value;
+  final double? lat;
+  final double? lng;
+  final Future<void> Function(double lat, double lng, String label) onOpenMap;
 
-  const _InfoLine({
+  const _AddressLine({
     required this.icon,
     required this.color,
     required this.label,
     required this.value,
+    required this.lat,
+    required this.lng,
+    required this.onOpenMap,
   });
+
+  bool get _hasLocation => lat != null && lng != null && lat != 0 && lng != 0;
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +499,41 @@ class _InfoLine extends StatelessWidget {
             ],
           ),
         ),
+        // Nút link Google Maps (chỉ hiện khi có tọa độ)
+        if (_hasLocation)
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Tooltip(
+              message: 'Mở Google Maps',
+              child: InkWell(
+                onTap: () => onOpenMap(lat!, lng!, label),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withAlpha(20),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.withAlpha(80)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.map_rounded, color: Colors.blue, size: 14),
+                      SizedBox(width: 3),
+                      Text(
+                        'Maps',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

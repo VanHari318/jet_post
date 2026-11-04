@@ -8,6 +8,7 @@ import '../services/customer_service.dart';
 import '../widgets/order_history_card.dart';
 import '../widgets/trip_rating_dialog.dart';
 import 'order_detail_screen.dart';
+import '../../../routes/app_routes.dart';
 
 /// Màn hình Trung Tâm Hoạt Động & Lịch Sử Cuốc Xe (Task 1.8)
 /// Phân loại 2 tab trực quan: "Đang diễn ra" & "Lịch sử chuyến đi"
@@ -224,12 +225,22 @@ class _CustomerActivityScreenState extends State<CustomerActivityScreen>
           return OrderHistoryCard.ride(
             ride: item,
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => OrderDetailScreen.ride(ride: item),
-                ),
-              );
+              if (_isRideActive(item)) {
+                // Chuyến đang diễn ra - mở màn hình theo dõi thời gian thực
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.liveTracking,
+                  arguments: <String, dynamic>{'rideId': item.id},
+                );
+              } else {
+                // Chúyern lịch sử - mở chi tiết đơn hàng
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OrderDetailScreen.ride(ride: item),
+                  ),
+                );
+              }
             },
             onRateNow: item.status == RideStatus.completed && item.rating == null
                 ? () => _openRatingDialog(
@@ -247,13 +258,23 @@ class _CustomerActivityScreenState extends State<CustomerActivityScreen>
           return OrderHistoryCard.delivery(
             delivery: delivery,
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      OrderDetailScreen.delivery(delivery: delivery),
-                ),
-              );
+              if (_isDeliveryActive(delivery)) {
+                // Đơn đang diễn ra - mở màn hình theo dõi thời gian thực
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.liveTracking,
+                  arguments: <String, dynamic>{'deliveryId': delivery.id},
+                );
+              } else {
+                // Đơn lịch sử - mở chi tiết đơn hàng
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        OrderDetailScreen.delivery(delivery: delivery),
+                  ),
+                );
+              }
             },
             onRateNow: delivery.status == DeliveryStatus.completed &&
                     delivery.rating == null
