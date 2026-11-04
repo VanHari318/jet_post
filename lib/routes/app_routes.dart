@@ -15,8 +15,10 @@ import '../modules/user/screens/direct_chat_screen.dart';
 import '../modules/user/screens/driver_ekyc_screen.dart';
 import '../modules/user/screens/kyc_pending_screen.dart';
 import '../modules/user/screens/link_email_screen.dart';
+import '../modules/user/screens/login_screen.dart';
 import '../modules/user/screens/messages_inbox_screen.dart';
-import '../modules/user/screens/phone_auth_screen.dart';
+import '../modules/user/screens/notifications_screen.dart';
+import '../modules/user/screens/registration_screen.dart';
 import '../modules/user/screens/user_profile_screen.dart';
 import '../modules/user/screens/welcome_gate_screen.dart';
 import '../modules/driver/screens/driver_dashboard_screen.dart';
@@ -54,11 +56,13 @@ class AppRoutes {
 
   // [Phân hệ 3 - Thành viên 3] User, Định danh & Chat
   static const String phoneAuth = '/user/phone-auth';
+  static const String register = '/user/register';
   static const String driverKyc = '/user/driver-ekyc';
   static const String kycPending = '/user/kyc-pending';
   static const String userProfile = '/user/profile';
   static const String appSettings = '/user/settings';
   static const String messagesInbox = '/user/messages-inbox';
+  static const String notifications = '/user/notifications';
   static const String directChat = '/user/direct-chat';
   static const String changePhone = '/user/change-phone';
   static const String linkEmail = '/user/link-email';
@@ -83,12 +87,14 @@ class AppRoutes {
     consigneeTracking: (context) => const ConsigneeTrackingScreen(),
     customerActivity: (context) => const CustomerActivityScreen(),
     savedAddresses: (context) => const SavedAddressesScreen(),
-    phoneAuth: (context) => const PhoneAuthScreen(),
+    phoneAuth: (context) => const LoginScreen(),
+    register: (context) => const RegistrationScreen(),
     driverKyc: (context) => const DriverEkycScreen(),
     kycPending: (context) => const KycPendingScreen(),
     userProfile: (context) => const UserProfileScreen(),
     appSettings: (context) => const AppSettingsScreen(),
     messagesInbox: (context) => const MessagesInboxScreen(),
+    notifications: (context) => const NotificationsScreen(),
     driverDashboard: (context) {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
