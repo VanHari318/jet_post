@@ -447,89 +447,206 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
-  /// Banner cuốc xe đang hoạt động của khách hàng
+  /// Banner cuốc xe và đơn giao hàng đang hoạt động của khách hàng
   Widget _buildOngoingTripBanner(String customerId, bool isDark) {
     return StreamBuilder<List<RideModel>>(
       stream: CustomerService.instance.streamCustomerRides(customerId),
       builder: (context, rideSnap) {
-        final activeRides = (rideSnap.data ?? [])
-            .where((r) =>
-                r.status == RideStatus.accepted ||
-                r.status == RideStatus.arrivedPickup ||
-                r.status == RideStatus.inProgress)
-            .toList();
+        return StreamBuilder<List<DeliveryModel>>(
+          stream: CustomerService.instance.streamCustomerDeliveries(customerId),
+          builder: (context, deliverySnap) {
+            final activeRides = (rideSnap.data ?? [])
+                .where((r) =>
+                    r.status == RideStatus.pendingDriver ||
+                    r.status == RideStatus.accepted ||
+                    r.status == RideStatus.arrivedPickup ||
+                    r.status == RideStatus.inProgress)
+                .toList();
 
-        if (activeRides.isNotEmpty) {
-          final ride = activeRides.first;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LiveTrackingScreen.ride(rideId: ride.id),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF00A86B), Color(0xFF007A4D)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withAlpha(80),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        backgroundColor: Colors.white,
-                        child: Icon(Icons.navigation_rounded,
-                            color: AppColors.primary, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Cuốc xe đang diễn ra!',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Tài xế: ${ride.driverName ?? 'Đang kết nối...'} • Chạm để theo dõi',
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 11),
-                            ),
-                          ],
+            final activeDeliveries = (deliverySnap.data ?? [])
+                .where((d) =>
+                    d.status == DeliveryStatus.pendingDriver ||
+                    d.status == DeliveryStatus.accepted ||
+                    d.status == DeliveryStatus.pickedUp ||
+                    d.status == DeliveryStatus.inTransit)
+                .toList();
+
+            if (activeRides.isEmpty && activeDeliveries.isEmpty) {
+              return const SizedBox.shrink();
+            }
+
+            // Ưu tiên hiển thị cuốc xe ôm nếu có
+            if (activeRides.isNotEmpty) {
+              final ride = activeRides.first;
+              final isSearching = ride.status == RideStatus.pendingDriver;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => LiveTrackingScreen.ride(rideId: ride.id),
                         ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isSearching
+                              ? [const Color(0xFF007A4D), const Color(0xFF004D30)]
+                              : [const Color(0xFF00A86B), const Color(0xFF007A4D)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withAlpha(80),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      const Icon(Icons.arrow_forward_ios_rounded,
-                          color: Colors.white, size: 16),
-                    ],
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.white,
+                            child: Icon(
+                              isSearching ? Icons.radar_rounded : Icons.two_wheeler_rounded,
+                              color: AppColors.primary,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isSearching
+                                      ? 'Xe ôm JetBike: Đang tìm tài xế...'
+                                      : 'Cuốc xe ôm đang diễn ra!',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  isSearching
+                                      ? 'Đã vào hàng chờ • Chạm để theo dõi tiến trình'
+                                      : 'Tài xế: ${ride.driverName ?? 'Đang kết nối...'} • Chạm để theo dõi',
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded,
+                              color: Colors.white, size: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            // Hiển thị đơn giao hàng nếu có
+            final delivery = activeDeliveries.first;
+            final isSearching = delivery.status == DeliveryStatus.pendingDriver;
+            final count = activeDeliveries.length;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    if (count > 1) {
+                      setState(() => _currentTabIndex = 1);
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => LiveTrackingScreen.delivery(deliveryId: delivery.id),
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isSearching
+                            ? [const Color(0xFFC75B00), const Color(0xFF8F3F00)]
+                            : [AppColors.secondary, const Color(0xFFC75B00)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.secondary.withAlpha(80),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Colors.white,
+                          child: Icon(
+                            isSearching ? Icons.hourglass_top_rounded : Icons.local_shipping_rounded,
+                            color: AppColors.secondary,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                count > 1
+                                    ? 'Bạn có $count đơn giao hàng đang xử lý!'
+                                    : (isSearching
+                                        ? 'Giao hàng: Đang tìm tài xế (${delivery.id.substring(0, 8).toUpperCase()})'
+                                        : 'Đơn giao hàng đang vận chuyển!'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                count > 1
+                                    ? 'Chạm để xem danh sách chi tiết các đơn'
+                                    : (isSearching
+                                        ? 'Đang trong danh sách chờ • Chạm để theo dõi'
+                                        : 'Tài xế: ${delivery.driverName ?? 'Đang giao...'} • Chạm để theo dõi'),
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded,
+                            color: Colors.white, size: 16),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }
-
-        return const SizedBox.shrink();
+            );
+          },
+        );
       },
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/cloudinary_service.dart';
+import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/app_dialogs.dart';
 import '../../../models/driver_model.dart';
 import '../../../routes/app_routes.dart';
@@ -10,6 +11,7 @@ import '../../../routes/app_routes.dart';
 /// Hiển thị thông tin nhận diện xe, tài xế và các nút gọi điện / chat P2P
 class DriverContactCard extends StatelessWidget {
   final DriverModel? driver;
+  final String? driverId;
   final String? driverName;
   final String? driverPhone;
   final String? driverPlate;
@@ -18,6 +20,7 @@ class DriverContactCard extends StatelessWidget {
   const DriverContactCard({
     super.key,
     this.driver,
+    this.driverId,
     this.driverName,
     this.driverPhone,
     this.driverPlate,
@@ -47,10 +50,30 @@ class DriverContactCard extends StatelessWidget {
 
   void _openDirectChat(BuildContext context, String targetUserId, String name,
       String? phone) {
-    if (targetUserId.isEmpty) return;
+    if (targetUserId.isEmpty) {
+      AppDialogs.showWarning(
+        context,
+        title: 'Chưa Sẵn Sàng',
+        message: 'Tài xế chưa hoàn tất liên kết tài khoản nhắn tin.',
+      );
+      return;
+    }
+
+    final myUid = currentCustomerId.isNotEmpty
+        ? currentCustomerId
+        : (FirebaseService.currentUserId ?? '');
+
+    if (myUid.isEmpty) {
+      AppDialogs.showWarning(
+        context,
+        title: 'Yêu Cầu Đăng Nhập',
+        message: 'Vui lòng đăng nhập để sử dụng tính năng nhắn tin P2P.',
+      );
+      return;
+    }
 
     // Quy tắc sinh chatId P2P cố định theo thứ tự bảng chữ cái UID
-    final uids = [currentCustomerId, targetUserId]..sort();
+    final uids = [myUid, targetUserId]..sort();
     final chatId = '${uids[0]}_${uids[1]}';
 
     Navigator.pushNamed(
@@ -73,7 +96,9 @@ class DriverContactCard extends StatelessWidget {
     final phone = driverPhone ?? '';
     final rating = driver?.rating ?? 5.0;
     final reviews = driver?.totalReviews ?? 0;
-    final driverId = driver?.id ?? '';
+    final targetDriverId = (driverId != null && driverId!.isNotEmpty)
+        ? driverId!
+        : (driver?.id ?? '');
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -211,7 +236,7 @@ class DriverContactCard extends StatelessWidget {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () =>
-                      _openDirectChat(context, driverId, name, phone),
+                      _openDirectChat(context, targetDriverId, name, phone),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,

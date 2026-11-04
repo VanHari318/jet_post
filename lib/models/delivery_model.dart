@@ -17,13 +17,19 @@ class DeliveryModel {
   final String? driverPhone; // SĐT tài xế
   final String? driverPlate; // Biển số xe máy
   final String pickupAddress; // Địa chỉ lấy hàng
+  final String? pickupDetail; // Chi tiết địa chỉ lấy (số nhà, phòng, tầng)
   final double pickupLat; // Vĩ độ lấy hàng
   final double pickupLng; // Kinh độ lấy hàng
   final String dropoffAddress; // Địa chỉ giao hàng
+  final String? dropoffDetail; // Chi tiết địa chỉ giao (số nhà, phòng, tầng)
   final double dropoffLat; // Vĩ độ giao hàng
   final double dropoffLng; // Kinh độ giao hàng
   final String pickupGeohash; // Mã Geohash điểm lấy hàng
   final double distanceKm; // Quãng đường giao hàng (km)
+  final double weightKg; // Khối lượng hàng hóa (kg)
+  final bool isFragile; // Hàng dễ vỡ
+  final bool isExpress; // Giao hỏa tốc
+  final String payer; // Người thanh toán: SENDER | RECEIVER
   final double price; // Cước tiền mặt cố định (VNĐ)
   final double codAmount; // Tiền thu hộ COD (VNĐ)
   final String paymentMethod; // Phương thức thanh toán (mặc định: CASH)
@@ -55,13 +61,19 @@ class DeliveryModel {
     this.driverPhone,
     this.driverPlate,
     required this.pickupAddress,
+    this.pickupDetail,
     required this.pickupLat,
     required this.pickupLng,
     required this.dropoffAddress,
+    this.dropoffDetail,
     required this.dropoffLat,
     required this.dropoffLng,
     required this.pickupGeohash,
     required this.distanceKm,
+    this.weightKg = 1.0,
+    this.isFragile = false,
+    this.isExpress = false,
+    this.payer = 'SENDER',
     required this.price,
     this.codAmount = 0,
     this.paymentMethod = 'CASH',
@@ -94,13 +106,19 @@ class DeliveryModel {
       driverPhone: data['driverPhone'] as String?,
       driverPlate: data['driverPlate'] as String?,
       pickupAddress: data['pickupAddress'] as String? ?? '',
+      pickupDetail: data['pickupDetail'] as String?,
       pickupLat: (data['pickupLat'] as num?)?.toDouble() ?? 0.0,
       pickupLng: (data['pickupLng'] as num?)?.toDouble() ?? 0.0,
       dropoffAddress: data['dropoffAddress'] as String? ?? '',
+      dropoffDetail: data['dropoffDetail'] as String?,
       dropoffLat: (data['dropoffLat'] as num?)?.toDouble() ?? 0.0,
       dropoffLng: (data['dropoffLng'] as num?)?.toDouble() ?? 0.0,
       pickupGeohash: data['pickupGeohash'] as String? ?? '',
       distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 0.0,
+      weightKg: (data['weightKg'] as num?)?.toDouble() ?? 1.0,
+      isFragile: data['isFragile'] as bool? ?? false,
+      isExpress: data['isExpress'] as bool? ?? false,
+      payer: data['payer'] as String? ?? 'SENDER',
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
       codAmount: (data['codAmount'] as num?)?.toDouble() ?? 0.0,
       paymentMethod: data['paymentMethod'] as String? ?? 'CASH',
@@ -132,13 +150,19 @@ class DeliveryModel {
       'driverPhone': driverPhone,
       'driverPlate': driverPlate,
       'pickupAddress': pickupAddress,
+      'pickupDetail': pickupDetail,
       'pickupLat': pickupLat,
       'pickupLng': pickupLng,
       'dropoffAddress': dropoffAddress,
+      'dropoffDetail': dropoffDetail,
       'dropoffLat': dropoffLat,
       'dropoffLng': dropoffLng,
       'pickupGeohash': pickupGeohash,
       'distanceKm': distanceKm,
+      'weightKg': weightKg,
+      'isFragile': isFragile,
+      'isExpress': isExpress,
+      'payer': payer,
       'price': price,
       'codAmount': codAmount,
       'paymentMethod': paymentMethod,
@@ -187,13 +211,19 @@ class DeliveryModel {
       driverPhone: driverPhone ?? this.driverPhone,
       driverPlate: driverPlate ?? this.driverPlate,
       pickupAddress: pickupAddress,
+      pickupDetail: pickupDetail,
       pickupLat: pickupLat,
       pickupLng: pickupLng,
       dropoffAddress: dropoffAddress,
+      dropoffDetail: dropoffDetail,
       dropoffLat: dropoffLat,
       dropoffLng: dropoffLng,
       pickupGeohash: pickupGeohash,
       distanceKm: distanceKm,
+      weightKg: weightKg,
+      isFragile: isFragile,
+      isExpress: isExpress,
+      payer: payer,
       price: price,
       codAmount: codAmount,
       paymentMethod: paymentMethod,

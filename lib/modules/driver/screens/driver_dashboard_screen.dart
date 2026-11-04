@@ -13,7 +13,6 @@ import '../widgets/driver_navigation_drawer.dart';
 import '../services/driver_order_preferences.dart';
 import '../services/driver_location_service.dart';
 import '../../../routes/app_routes.dart';
-import '../widgets/incoming_order_sheet.dart';
 
 /// Màn hình chính của tài xế — hiển thị bản đồ OSM + toggle online/offline
 /// Lắng nghe đơn mới và hiện IncomingOrderSheet khi có cuốc phù hợp
@@ -58,8 +57,6 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
   RideModel? _activeRide;
   DeliveryModel? _activeDelivery;
   bool _autoAcceptInProgress = false;
-  // T?p h?p c�c orderId d� hi?n popup d? kh�ng hi?n l?i (tr�nh spam)
-  final Set<String> _shownOrderIds = {};
 
   @override
   void initState() {
@@ -274,63 +271,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
     );
   }
 
-  /// Khi có đơn mới → thử auto-accept hoặc hiện IncomingOrderSheet popup cho tài xế
+  /// Khi có đơn mới → thử auto-accept (nếu tài xế bật) và làm mới danh sách đơn chờ nhận
   void _onOrdersChanged() {
     unawaited(_autoAcceptEligibleOrder());
-    unawaited(_showIncomingOrderIfNeeded());
-  }
-
-  /// Hiển thị IncomingOrderSheet cho tài xế khi có đơn trong bán kính
-  /// Mỗi orderId chỉ được hiện một lần duy nhất
-  Future<void> _showIncomingOrderIfNeeded() async {
-    if (!mounted) return;
-    if (_controller.driverModel.value?.isBusy == true) return;
-    if (!_controller.isOnline.value) return;
-    if (_autoAcceptInProgress || _isAcceptingOrder) return;
-
-    for (final ride in _controller.pendingRides.value) {
-      if (_shownOrderIds.contains(ride.id)) continue;
-      _shownOrderIds.add(ride.id);
-      if (!mounted) return;
-      await IncomingOrderSheet.showRide(
-        context: context,
-        ride: ride,
-        onAccept: () async {
-          final ok = await _controller.acceptRide(ride);
-          if (ok && mounted) {
-            _activeTripId = ride.id;
-            _activeTripType = 'ride';
-            await _loadActiveTrip(ride.id);
-            if (mounted) _tabController.animateTo(1);
-          }
-          return ok;
-        },
-        onDecline: () {},
-      );
-      return;
-    }
-
-    for (final delivery in _controller.pendingDeliveries.value) {
-      if (_shownOrderIds.contains(delivery.id)) continue;
-      _shownOrderIds.add(delivery.id);
-      if (!mounted) return;
-      await IncomingOrderSheet.showDelivery(
-        context: context,
-        delivery: delivery,
-        onAccept: () async {
-          final ok = await _controller.acceptDelivery(delivery);
-          if (ok && mounted) {
-            _activeTripId = delivery.id;
-            _activeTripType = 'delivery';
-            await _loadActiveTrip(delivery.id);
-            if (mounted) _tabController.animateTo(1);
-          }
-          return ok;
-        },
-        onDecline: () {},
-      );
-      return;
-    }
+    unawaited(_refreshAvailableOrders());
   }
 
   Future<void> _autoAcceptEligibleOrder() async {
@@ -423,6 +367,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
     final accepted = await _controller.acceptRide(ride);
     if (!mounted) return;
     setState(() => _isAcceptingOrder = false);
+    unawaited(_refreshAvailableOrders());
     if (accepted) {
       _activeTripId = ride.id;
       _activeTripType = 'ride';
@@ -443,6 +388,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
     final accepted = await _controller.acceptDelivery(delivery);
     if (!mounted) return;
     setState(() => _isAcceptingOrder = false);
+    unawaited(_refreshAvailableOrders());
     if (accepted) {
       _activeTripId = delivery.id;
       _activeTripType = 'delivery';

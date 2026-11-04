@@ -25,6 +25,9 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
   late TextEditingController _pricePerKmRideCtrl;
   late TextEditingController _basePriceDeliveryCtrl;
   late TextEditingController _pricePerKmDeliveryCtrl;
+  late TextEditingController _pricePerKgDeliveryCtrl;
+  late TextEditingController _fragileSurchargeCtrl;
+  late TextEditingController _expressSurchargeCtrl;
   late TextEditingController _commissionCtrl;
   late TextEditingController _maxRadiusCtrl;
   late TextEditingController _driverTimeoutCtrl;
@@ -42,6 +45,9 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
     _pricePerKmRideCtrl = TextEditingController();
     _basePriceDeliveryCtrl = TextEditingController();
     _pricePerKmDeliveryCtrl = TextEditingController();
+    _pricePerKgDeliveryCtrl = TextEditingController();
+    _fragileSurchargeCtrl = TextEditingController();
+    _expressSurchargeCtrl = TextEditingController();
     _commissionCtrl = TextEditingController();
     _maxRadiusCtrl = TextEditingController();
     _driverTimeoutCtrl = TextEditingController();
@@ -64,6 +70,12 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
           settings.basePriceDelivery.toStringAsFixed(0);
       _pricePerKmDeliveryCtrl.text =
           settings.pricePerKmDelivery.toStringAsFixed(0);
+      _pricePerKgDeliveryCtrl.text =
+          settings.pricePerKgDelivery.toStringAsFixed(0);
+      _fragileSurchargeCtrl.text =
+          settings.fragileSurcharge.toStringAsFixed(0);
+      _expressSurchargeCtrl.text =
+          settings.expressSurcharge.toStringAsFixed(0);
       _commissionCtrl.text =
           (settings.commissionRate * 100).toStringAsFixed(0);
       _maxRadiusCtrl.text = settings.maxSearchRadiusKm.toStringAsFixed(1);
@@ -77,6 +89,9 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
       _pricePerKmRideCtrl.text = '6000';
       _basePriceDeliveryCtrl.text = '18000';
       _pricePerKmDeliveryCtrl.text = '7000';
+      _pricePerKgDeliveryCtrl.text = '10000';
+      _fragileSurchargeCtrl.text = '10000';
+      _expressSurchargeCtrl.text = '20000';
       _commissionCtrl.text = '15';
       _maxRadiusCtrl.text = '5.0';
       _driverTimeoutCtrl.text = '15';
@@ -94,6 +109,9 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
         pricePerKmRide: double.parse(_pricePerKmRideCtrl.text),
         basePriceDelivery: double.parse(_basePriceDeliveryCtrl.text),
         pricePerKmDelivery: double.parse(_pricePerKmDeliveryCtrl.text),
+        pricePerKgDelivery: double.parse(_pricePerKgDeliveryCtrl.text),
+        fragileSurcharge: double.parse(_fragileSurchargeCtrl.text),
+        expressSurcharge: double.parse(_expressSurchargeCtrl.text),
         commissionRate: double.parse(_commissionCtrl.text) / 100,
         maxSearchRadiusKm: double.parse(_maxRadiusCtrl.text),
         driverAcceptTimeoutSeconds: int.parse(_driverTimeoutCtrl.text),
@@ -138,6 +156,9 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
     _pricePerKmRideCtrl.dispose();
     _basePriceDeliveryCtrl.dispose();
     _pricePerKmDeliveryCtrl.dispose();
+    _pricePerKgDeliveryCtrl.dispose();
+    _fragileSurchargeCtrl.dispose();
+    _expressSurchargeCtrl.dispose();
     _commissionCtrl.dispose();
     _maxRadiusCtrl.dispose();
     _driverTimeoutCtrl.dispose();
@@ -257,6 +278,24 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
                           controller: _pricePerKmDeliveryCtrl,
                           unit: 'đ/km',
                           hint: '7000',
+                        ),
+                        _PriceField(
+                          label: 'Phí mỗi 1 kg hàng hóa',
+                          controller: _pricePerKgDeliveryCtrl,
+                          unit: 'đ/kg',
+                          hint: '10000',
+                        ),
+                        _PriceField(
+                          label: 'Phụ phí hàng dễ vỡ',
+                          controller: _fragileSurchargeCtrl,
+                          unit: 'đ',
+                          hint: '10000',
+                        ),
+                        _PriceField(
+                          label: 'Phụ phí giao hàng hỏa tốc',
+                          controller: _expressSurchargeCtrl,
+                          unit: 'đ',
+                          hint: '20000',
                         ),
                       ],
                     ),

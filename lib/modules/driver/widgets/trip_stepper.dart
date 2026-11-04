@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
+import '../../../core/services/cloudinary_service.dart';
 import '../../../models/ride_model.dart';
 import '../../../models/delivery_model.dart';
 import '../controllers/driver_trip_controller.dart';
@@ -50,7 +54,15 @@ class TripStepper extends StatelessWidget {
             confirmMessage: controller.deliveryConfirmMessage,
             canAdvance: controller.canAdvance,
             isUpdating: controller.isUpdating,
-            onSwipeConfirmed: () => controller.advanceDeliveryStatus(),
+            onSwipeConfirmed: () {
+              if (delivery.status == DeliveryStatus.inTransit) {
+                _showDeliveryCompletionDialog(context, controller, delivery);
+              } else if (delivery.status == DeliveryStatus.accepted) {
+                _showPickupConfirmationDialog(context, controller, delivery);
+              } else {
+                controller.advanceDeliveryStatus();
+              }
+            },
             onCancel: (reason) => controller.cancelTrip(reason),
             isCompleted: delivery.status == DeliveryStatus.completed,
             isCancelled: delivery.status == DeliveryStatus.cancelled ||
@@ -159,6 +171,669 @@ class TripStepper extends StatelessWidget {
       default:
         return 0;
     }
+  }
+
+  /// Hộp thoại xác nhận lấy hàng từ người gửi
+  Future<void> _showPickupConfirmationDialog(
+    BuildContext context,
+    DriverTripController controller,
+    DeliveryModel delivery,
+  ) async {
+    File? pickedImage;
+    bool isUploading = false;
+    String? localError;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetContext, setModalState) {
+          final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+          final bottomPadding = MediaQuery.of(sheetContext).viewInsets.bottom +
+              max(20.0, MediaQuery.of(sheetContext).padding.bottom + 12.0);
+
+          return SafeArea(
+            top: false,
+            bottom: true,
+            child: Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: bottomPadding,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : Colors.white,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withAlpha(100),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: const [
+                        Icon(Icons.inventory_2_rounded,
+                            color: AppColors.secondary, size: 24),
+                        SizedBox(width: 10),
+                        Text(
+                          'Xác Nhận Đã Nhận Gói Hàng',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Kiểm tra kiện hàng từ người gửi (${delivery.senderName}). Vui lòng chụp ảnh gói hàng để lưu bằng chứng nhận hàng.',
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondaryLight),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Khu vực ảnh xem toàn bộ + Chụp lại + Phóng to
+                    if (pickedImage != null) ...[
+                      Stack(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              _showFullScreenImageViewer(
+                                  sheetContext, pickedImage!);
+                            },
+                            child: Container(
+                              height: 200,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: AppColors.primary,
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(
+                                  pickedImage!,
+                                  fit: BoxFit.contain,
+                                  width: double.infinity,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Row(
+                              children: [
+                                Material(
+                                  color: Colors.black54,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    tooltip: 'Xem toàn màn hình',
+                                    icon: const Icon(Icons.fullscreen_rounded,
+                                        color: Colors.white, size: 20),
+                                    onPressed: () => _showFullScreenImageViewer(
+                                        sheetContext, pickedImage!),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Material(
+                                  color: Colors.black54,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    tooltip: 'Chụp lại',
+                                    icon: const Icon(Icons.replay_rounded,
+                                        color: Colors.white, size: 20),
+                                    onPressed: isUploading
+                                        ? null
+                                        : () async {
+                                            final picker = ImagePicker();
+                                            final xFile =
+                                                await picker.pickImage(
+                                              source: ImageSource.camera,
+                                              maxWidth: 1200,
+                                              maxHeight: 1200,
+                                              imageQuality: 80,
+                                            );
+                                            if (xFile != null) {
+                                              setModalState(() {
+                                                pickedImage = File(xFile.path);
+                                                localError = null;
+                                              });
+                                            }
+                                          },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Center(
+                        child: Text(
+                          'Chạm vào ảnh để phóng to toàn màn hình',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondaryLight),
+                        ),
+                      ),
+                    ] else ...[
+                      InkWell(
+                        onTap: isUploading
+                            ? null
+                            : () async {
+                                final picker = ImagePicker();
+                                final xFile = await picker.pickImage(
+                                  source: ImageSource.camera,
+                                  maxWidth: 1200,
+                                  maxHeight: 1200,
+                                  imageQuality: 80,
+                                );
+                                if (xFile != null) {
+                                  setModalState(() {
+                                    pickedImage = File(xFile.path);
+                                    localError = null;
+                                  });
+                                }
+                              },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 150,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.cardDark
+                                : AppColors.backgroundLight,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: localError != null
+                                  ? AppColors.error
+                                  : AppColors.borderLight,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.add_a_photo_rounded,
+                                  color: AppColors.primary, size: 40),
+                              SizedBox(height: 8),
+                              Text(
+                                'Bấm để chụp ảnh kiện hàng (Bắt buộc)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    if (localError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        localError!,
+                        style: const TextStyle(
+                          color: AppColors.error,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: isUploading
+                          ? null
+                          : () async {
+                              if (pickedImage == null) {
+                                setModalState(() {
+                                  localError =
+                                      'Vui lòng chụp ảnh kiện hàng trước khi xác nhận nhận hàng!';
+                                });
+                                return;
+                              }
+
+                              setModalState(() => isUploading = true);
+                              String? uploadedUrl;
+                              uploadedUrl = await CloudinaryService.instance
+                                  .uploadCustomImage(
+                                imageFile: pickedImage!,
+                                subFolder: 'deliveries/pickup',
+                                fileName:
+                                    'pickup_${delivery.id}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+                              );
+
+                              await controller.advanceDeliveryStatus(
+                                pickupPhotoUrl: uploadedUrl,
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: isUploading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Xác Nhận & Bắt Đầu Di Chuyển',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Hộp thoại đối soát OTP & PoD bàn giao hàng thành công
+  Future<void> _showDeliveryCompletionDialog(
+    BuildContext context,
+    DriverTripController controller,
+    DeliveryModel delivery,
+  ) async {
+    final otpController = TextEditingController();
+    File? podImage;
+    bool isUploading = false;
+    String? localError;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetContext, setModalState) {
+          final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+          final bottomPadding = MediaQuery.of(sheetContext).viewInsets.bottom +
+              max(20.0, MediaQuery.of(sheetContext).padding.bottom + 12.0);
+
+          return SafeArea(
+            top: false,
+            bottom: true,
+            child: Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: bottomPadding,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : Colors.white,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withAlpha(100),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: const [
+                        Icon(Icons.verified_user_rounded,
+                            color: AppColors.success, size: 26),
+                        SizedBox(width: 10),
+                        Text(
+                          'Bàn Giao & Hoàn Tất Đơn',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Yêu cầu người nhận (${delivery.receiverName}) đọc mã OTP 4 số và chụp ảnh bàn giao hàng hóa.',
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondaryLight),
+                    ),
+                    const SizedBox(height: 16),
+                    // Ô nhập OTP
+                    TextField(
+                      controller: otpController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 10,
+                        color: AppColors.primary,
+                      ),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        labelText: 'Nhập Mã OTP 4 số từ Người Nhận',
+                        hintText: '••••',
+                        errorText: localError,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        prefixIcon:
+                            const Icon(Icons.pin_rounded, color: AppColors.primary),
+                      ),
+                      onChanged: (_) {
+                        if (localError != null) {
+                          setModalState(() => localError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Ô chụp ảnh PoD
+                    if (podImage != null) ...[
+                      Stack(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              _showFullScreenImageViewer(
+                                  sheetContext, podImage!);
+                            },
+                            child: Container(
+                              height: 180,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: AppColors.success,
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(
+                                  podImage!,
+                                  fit: BoxFit.contain,
+                                  width: double.infinity,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Row(
+                              children: [
+                                Material(
+                                  color: Colors.black54,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    tooltip: 'Xem toàn màn hình',
+                                    icon: const Icon(Icons.fullscreen_rounded,
+                                        color: Colors.white, size: 20),
+                                    onPressed: () => _showFullScreenImageViewer(
+                                        sheetContext, podImage!),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Material(
+                                  color: Colors.black54,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    tooltip: 'Chụp lại',
+                                    icon: const Icon(Icons.replay_rounded,
+                                        color: Colors.white, size: 20),
+                                    onPressed: isUploading
+                                        ? null
+                                        : () async {
+                                            final picker = ImagePicker();
+                                            final xFile =
+                                                await picker.pickImage(
+                                              source: ImageSource.camera,
+                                              maxWidth: 1200,
+                                              maxHeight: 1200,
+                                              imageQuality: 80,
+                                            );
+                                            if (xFile != null) {
+                                              setModalState(() {
+                                                podImage = File(xFile.path);
+                                                localError = null;
+                                              });
+                                            }
+                                          },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Center(
+                        child: Text(
+                          'Chạm vào ảnh để phóng to toàn màn hình',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondaryLight),
+                        ),
+                      ),
+                    ] else ...[
+                      InkWell(
+                        onTap: isUploading
+                            ? null
+                            : () async {
+                                final picker = ImagePicker();
+                                final xFile = await picker.pickImage(
+                                  source: ImageSource.camera,
+                                  maxWidth: 1200,
+                                  maxHeight: 1200,
+                                  imageQuality: 80,
+                                );
+                                if (xFile != null) {
+                                  setModalState(() {
+                                    podImage = File(xFile.path);
+                                    localError = null;
+                                  });
+                                }
+                              },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.cardDark
+                                : AppColors.backgroundLight,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: localError != null && podImage == null
+                                  ? AppColors.error
+                                  : AppColors.borderLight,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.camera_alt_rounded,
+                                  color: AppColors.secondary, size: 36),
+                              SizedBox(height: 6),
+                              Text(
+                                'Bấm để chụp ảnh bàn giao (PoD) (Bắt buộc)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.secondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: isUploading
+                          ? null
+                          : () async {
+                              final enteredOtp = otpController.text.trim();
+                              if (enteredOtp.length != 4) {
+                                setModalState(() {
+                                  localError =
+                                      'Vui lòng nhập đủ 4 chữ số OTP từ người nhận.';
+                                });
+                                return;
+                              }
+
+                              // Đối soát OTP với handoverOtp
+                              final correctOtp = delivery.handoverOtp?.trim();
+                              if (correctOtp != null && correctOtp.isNotEmpty) {
+                                if (enteredOtp != correctOtp) {
+                                  setModalState(() {
+                                    localError =
+                                        'Mã OTP không đúng! Hãy hỏi lại người nhận.';
+                                  });
+                                  return;
+                                }
+                              }
+
+                              if (podImage == null) {
+                                setModalState(() {
+                                  localError =
+                                      'Vui lòng chụp ảnh bàn giao hàng hóa (PoD) trước khi hoàn tất!';
+                                });
+                                return;
+                              }
+
+                              setModalState(() => isUploading = true);
+                              String? podUrl;
+                              podUrl = await CloudinaryService.instance
+                                  .uploadDeliveryPod(
+                                imageFile: podImage!,
+                                deliveryId: delivery.id,
+                              );
+
+                              final ok = await controller.completeDelivery(
+                                enteredOtp: enteredOtp,
+                                podPhotoUrl: podUrl,
+                              );
+
+                              if (ok) {
+                                if (ctx.mounted) Navigator.pop(ctx);
+                              } else {
+                                setModalState(() {
+                                  isUploading = false;
+                                  localError = controller.errorMessage.value ??
+                                      'Có lỗi xảy ra khi hoàn tất đơn.';
+                                });
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: isUploading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Xác Nhận Bàn Giao Thành Công',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Trình xem toàn ảnh có thể zoom kéo thả
+  void _showFullScreenImageViewer(BuildContext context, File imageFile) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: Image.file(
+                  imageFile,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

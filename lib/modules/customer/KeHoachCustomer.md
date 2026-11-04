@@ -56,30 +56,64 @@ Tuân thủ nghiêm ngặt theo đặc tả mục 3.1 của [KeHoach.md](file://
   3. *Vẽ tuyến đường & Tính cước Upfront:*
      - Gọi `OpenRouteClient.getDirections(start, end)` lấy khoảng cách (km), thời gian di chuyển dự kiến (phút) và danh sách tọa độ Polyline nối giữa điểm đón và điểm trả.
      - Đọc biểu cước từ `system_settings/pricing` (giá mở cửa 2km đầu + đơn giá/km tiếp theo) để tính ra số tiền cước cố định (VNĐ), hiển thị qua `CurrencyFormatter.formatVND(price)`.
-  4. *Tạo đơn & Radar quét tài xế:*
+  4. *Tạo đơn & Cơ chế Hàng chờ Xe Ôm (Ride Queue - Tối đa 1 phần tử):*
+     - **Quy tắc bất biến:** Mỗi khách hàng tại một thời điểm chỉ có thể duy trì **duy nhất 1 cuốc xe ôm** (`pendingDriver`, `accepted`, `arrivedPickup`, `inProgress`). Khi mở màn hình đặt xe hoặc bấm tạo đơn, hệ thống kiểm tra qua `CustomerService.getActiveRide(uid)`. Nếu đã có cuốc xe đang hoạt động, hệ thống lập tức chặn tạo đơn trùng và chuyển hướng đến màn hình chuyến đi hiện tại.
      - Khách hàng bấm **"Đặt xe ngay"** ➔ `CustomerService.createRideBooking()` khởi tạo tài liệu trong collection `rides`:
        - `status: RideStatus.pendingDriver`
        - `customerId`, `customerName`, `customerPhone` (lấy từ User hiện tại)
        - `pickupAddress`, `pickupLat`, `pickupLng`, `pickupGeohash`
        - `dropoffAddress`, `dropoffLat`, `dropoffLng`
        - `distanceKm`, `price`, `paymentMethod: 'CASH'`, `routePolyline`
-     - Màn hình chuyển sang trạng thái Radar quét tài xế với vòng tròn sóng xung kích pulsating và đồng hồ đếm ngược **45 giây**.
+     - **Trải nghiệm linh hoạt không bắt khách chờ cứng:**
+       - Thay vì ép khách hàng nhìn đồng hồ đếm ngược 45s, hệ thống hiển thị Dialog thông báo cuốc xe đã vào hàng chờ.
+       - Khách có thể chọn *"Ở lại theo dõi"* (tiếp tục quan sát radar đếm ngược 45s) hoặc *"Về Trang Chủ"* để thực hiện các tác vụ khác (đặt giao hàng, nhắn tin chat P2P...).
+       - Trên Trang chủ (`CustomerHomeScreen`), Banner nổi bật thời gian thực sẽ hiển thị: *"Xe ôm JetBike: Đang tìm tài xế... Chạm để theo dõi"* giúp khách hàng kiểm soát chuyến đi mọi lúc. Khi tài xế nhận cuốc, banner chuyển ngay sang thông tin tài xế và tiến trình chuyến.
 
 ### Task 1.2 - Giao Diện & Dịch Vụ Tạo Đơn Giao Hàng Nhanh (Express Delivery)
-* **Mục tiêu:** Tạo đơn vận chuyển bưu phẩm, tài liệu, đồ ăn hỏa tốc kèm cơ chế bảo mật bàn giao chuẩn logistics quốc tế.
+* **Mục tiêu:** Tạo đơn vận chuyển bưu phẩm, tài liệu, hàng hóa kèm cơ chế bảo mật bàn giao chuẩn logistics và mô hình Bể đơn hàng (Waiting Pool) linh hoạt.
 * **Kiến trúc & Luồng thực thi:**
-  1. *Thông tin người nhận:* Nhập Tên người nhận, Số điện thoại người nhận (kiểm duyệt định dạng SĐT hợp lệ qua `AppValidators.validatePhone`).
-  2. *Phân loại bưu kiện & Ghi chú:*
-     - Chọn loại bưu phẩm: **Tài liệu** | **Đồ ăn** | **Hàng nặng** | **Hàng cồng kềnh**.
-     - Nhập ghi chú vận chuyển (VD: *"Hàng dễ vỡ, xin nhẹ tay"*, *"Giao giờ hành chính"*).
-  3. *Điểm lấy hàng & Điểm giao hàng:* Cho phép tùy chỉnh điểm lấy hàng (mặc định vị trí khách) và điểm giao hàng qua bản đồ/tìm kiếm.
-  4. *Tính cước vận chuyển & Phụ phí:* Tự động cộng thêm phụ phí loại hàng đặc thù (nếu có) vào giá cước quãng đường.
-  5. *Sinh mã OTP Bàn giao An toàn (Handover OTP):*
-     - Hệ thống sinh ngẫu nhiên **Mã OTP 4 số bí mật** (`handoverOtp = (1000 + Random().nextInt(9000)).toString()`).
-     - Mã OTP này được lưu vào tài liệu `deliveries/{id}`, hiển thị độc quyền trên ứng dụng của Người nhận (Task 1.4) và Người gửi. Tài xế khi giao hàng buộc phải hỏi người nhận và nhập đúng 4 số này mới hoàn tất được đơn hàng.
-  6. *Tạo đơn & Chia sẻ hành trình:*
-     - Khách bấm **"Tạo đơn giao hàng"** ➔ `CustomerService.createDeliveryBooking()` đẩy lên collection `deliveries`.
-     - Cung cấp nút tiện ích **"Chia sẻ mã bưu phẩm & hành trình"** qua `url_launcher` gửi tin nhắn SMS / Zalo cho người nhận.
+  1. *Thông tin tuyến đường & Chi tiết địa chỉ:*
+     - Điểm lấy hàng: Tọa độ GPS/địa chỉ đã chọn + ô nhập chi tiết (`pickupDetail`: Số nhà, tòa nhà, số tầng, phòng...).
+     - Điểm giao hàng: Tích hợp Dual-Engine Search (Photon + Nominatim) + Quick Address Chips + ô nhập chi tiết (`dropoffDetail`: Tòa nhà, căn hộ, số phòng, chỉ dẫn giao hàng).
+  2. *Thông tin người nhận & Kiểm duyệt chặt chẽ (Validation):*
+     - Họ tên người nhận: Bắt buộc, tối thiểu 2 ký tự.
+     - Số điện thoại người nhận: Chuẩn hóa E.164 qua `AppValidators.validatePhone`. **Ràng buộc:** Số điện thoại người nhận không được trùng với số điện thoại của người gửi (`receiverPhone != senderPhone`).
+  3. *Phân loại bưu phẩm, Khối lượng & Dịch vụ gia tăng:*
+     - Chọn loại hàng: **Tài liệu** | **Đồ ăn / Thức uống** | **Quần áo / Mỹ phẩm** | **Đồ điện tử** | **Hàng cồng kềnh**.
+     - Khối lượng hàng hóa (`weightKg`): Bộ tăng giảm `[-] [+]` linh hoạt từ 0.5kg đến 30kg. Cước khối lượng tính theo: `weightKg * pricePerKgDelivery` (mặc định +10.000 đ/kg, Admin chỉnh sửa được trong cấu hình).
+     - Tùy chọn **"Hàng dễ vỡ, xin nhẹ tay"** (`isFragile`): Tự động cộng phụ phí bảo quản an toàn (mặc định +10.000 đ, Admin chỉnh sửa được).
+     - Tùy chọn **"Giao hỏa tốc ưu tiên trong 1h"** (`isExpress`): Ưu tiên điều phối tài xế nhanh nhất (mặc định +20.000 đ, Admin chỉnh sửa được).
+  4. *Hình thức thanh toán & Thu hộ COD:*
+     - Tiền thu hộ COD (`codAmount`): Ô nhập tiền mặt thu hộ, giới hạn hạn mức tối đa **3.000.000 đ/đơn**.
+     - Người trả cước (`payer`): Cho phép chọn **Người gửi thanh toán (SENDER)** hoặc **Người nhận thanh toán khi nhận hàng (RECEIVER)**.
+  5. *Công thức tính cước Upfront minh bạch:*
+     $$\text{Cước giao hàng} = \text{Cước cự ly (khoảng cách)} + \text{Phụ phí khối lượng} + \text{Phụ phí dễ vỡ} + \text{Phụ phí hỏa tốc} + \text{Phụ phí loại hàng}$$
+     - Cự ly $\le 2\text{km}$: `basePriceDelivery` (18.000 đ).
+     - Cự ly $> 2\text{km}$: `basePriceDelivery + (distanceKm - 2) * pricePerKmDelivery` (7.000 đ/km).
+     - Khối lượng: `weightKg * pricePerKgDelivery` (10.000 đ/kg).
+     - Dễ vỡ: `isFragile ? fragileSurcharge (10.000 đ) : 0`.
+     - Hỏa tốc: `isExpress ? expressSurcharge (20.000 đ) : 0`.
+     - Tất cả các đơn giá đều được đồng bộ thời gian thực từ tài liệu `system_settings/global_config` do Admin quản trị.
+  6. *Kiểm tra giới hạn cự ly (Distance Validation):* Cự ly đơn giao hàng phải từ **100m trở lên** (tránh chọn trùng điểm lấy) và **tối đa 40km** (phù hợp năng lực xe máy nội ô).
+  7. *Mô hình Bể đơn hàng (Waiting Pool Architecture):*
+     - Không ép khách hàng phải chờ cứng ở màn hình radar như xe ôm.
+     - Sau khi bấm tạo đơn thành công, đơn hàng được đẩy lên collection `deliveries` với trạng thái `pendingDriver` (+1 vào danh sách chờ).
+     - Hộp thoại thành công cung cấp 2 lựa chọn:
+       - **"Tạo Đơn Khác":** Tự động reset form người nhận/giao để khách tiếp tục tạo đơn tiếp theo (rất tiện lợi cho các chủ shop, người gửi nhiều đơn trong ngày).
+       - **"Xem Danh Sách":** Chuyển ngay sang tab **"Hoạt động" ➔ "Đang diễn ra"** (`CustomerActivityScreen`) để theo dõi tất cả các đơn hàng đang chờ tiếp nhận hoặc đang giao.
+  8. *Quy trình Bàn giao Hàng hóa & Vai trò Sống còn của Mã OTP:*
+     - Khi tạo đơn: Hệ thống sinh ngẫu nhiên **Mã OTP 4 số bí mật** (`handoverOtp`). Mã này lưu tại `deliveries/{id}` và **chỉ hiển thị ở phía Người Nhận** (trên tab "Đơn nhận" / `ConsigneeTrackingScreen` hoặc qua SMS chia sẻ từ Người gửi).
+     - Khi tài xế đến điểm giao (Dropoff):
+       1. Tài xế bấm "Đã đến nơi giao" và liên hệ người nhận.
+       2. Người nhận ra kiểm tra kiện hàng.
+       3. Tài xế dùng ứng dụng mở máy ảnh chụp ảnh gói hàng thực tế (Proof of Delivery - PoD) tải lên Cloudinary (`jetpost/deliveries_pod`).
+       4. Tài xế yêu cầu người nhận đọc mã OTP 4 số và nhập vào app (`DriverTripScreen`).
+       5. Hệ thống xác thực mã khớp ➔ chuyển trạng thái `completed`.
+     - **Vai trò của mã OTP:**
+       - **Bằng chứng giao hàng không thể chối bỏ (Non-repudiation):** Người nhận không thể nói "Chưa nhận được hàng" vì chỉ người nhận mới có mã OTP để đọc cho tài xế.
+       - **Chống gian lận tài xế (Anti-fraud):** Tài xế không thể tự ý bấm "Đã hoàn thành" hoặc đánh tráo gói hàng từ xa.
+       - **Xác thực danh tính (Identity Verification):** Đảm bảo giao đúng người được ủy quyền, tránh thất thoát tại chung cư, sảnh tòa nhà.
+       - **Căn cứ đối soát cho Admin (`AdminDisputeScreen`):** Khi phát sinh khiếu nại, sự kết hợp giữa ảnh chụp PoD và xác thực mã OTP là bằng chứng pháp lý minh bạch 100%.
 
 ### Task 1.3 - Theo Dõi Hành Trình Thời Gian Thực (Live Real-time Tracking)
 * **Mục tiêu:** Tái hiện toàn bộ chuyển động của tài xế và tiến trình chuyến đi trên bản đồ sống động.

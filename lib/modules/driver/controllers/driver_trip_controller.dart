@@ -135,8 +135,8 @@ class DriverTripController {
   // ── Advance Status — Giao Hàng ───────────────────────────────────────────
 
   /// Chuyển sang trạng thái kế tiếp cho đơn giao hàng
-  /// accepted → pickedUp → inTransit → completed
-  Future<bool> advanceDeliveryStatus() async {
+  /// accepted → pickedUp → inTransit
+  Future<bool> advanceDeliveryStatus({String? pickupPhotoUrl}) async {
     final delivery = currentDelivery.value;
     if (delivery == null || isUpdating.value) return false;
 
@@ -150,6 +150,10 @@ class DriverTripController {
       final updateData = <String, dynamic>{
         'status': nextStatus.toFirestore(),
       };
+
+      if (pickupPhotoUrl != null && pickupPhotoUrl.isNotEmpty) {
+        updateData['pickupPhotoUrl'] = pickupPhotoUrl;
+      }
 
       // Ghi timestamp khi hoàn thành giao hàng
       if (nextStatus == DeliveryStatus.completed) {
@@ -166,6 +170,52 @@ class DriverTripController {
       return true;
     } catch (e) {
       errorMessage.value = 'Không thể cập nhật trạng thái. Vui lòng thử lại.';
+      return false;
+    } finally {
+      isUpdating.value = false;
+    }
+  }
+
+  /// Hoàn thành giao hàng với mã OTP và ảnh PoD
+  /// inTransit → completed
+  Future<bool> completeDelivery({
+    required String enteredOtp,
+    String? podPhotoUrl,
+  }) async {
+    final delivery = currentDelivery.value;
+    if (delivery == null || isUpdating.value) return false;
+
+    // Kiểm tra OTP bàn giao (nếu đơn có cài đặt OTP)
+    final correctOtp = delivery.handoverOtp?.trim();
+    if (correctOtp != null && correctOtp.isNotEmpty) {
+      if (enteredOtp.trim() != correctOtp) {
+        errorMessage.value =
+            'Mã OTP người nhận cung cấp không chính xác. Vui lòng kiểm tra lại!';
+        return false;
+      }
+    }
+
+    isUpdating.value = true;
+    errorMessage.value = null;
+
+    try {
+      final updateData = <String, dynamic>{
+        'status': DeliveryStatus.completed.toFirestore(),
+        'deliveredAt': FieldValue.serverTimestamp(),
+      };
+
+      if (podPhotoUrl != null && podPhotoUrl.isNotEmpty) {
+        updateData['podPhotoUrl'] = podPhotoUrl;
+      }
+
+      await _firestore.collection('deliveries').doc(tripId).update(updateData);
+
+      // Giải phóng tài xế sau khi hoàn thành
+      await _releaseDriver();
+
+      return true;
+    } catch (e) {
+      errorMessage.value = 'Không thể hoàn tất giao hàng. Vui lòng thử lại.';
       return false;
     } finally {
       isUpdating.value = false;
@@ -221,7 +271,7 @@ class DriverTripController {
 
   // ── Helper: Giải phóng tài xế sau khi hoàn thành / hủy ──────────────────
 
-  /// Đặt lại trạng thái tài xế về rảnh và tăng tổng số chuyến (nếu completed)
+  /// Đặt lại trạng thái tài xế về rảnh, tăng số chuyến và cộng thu nhập khi hoàn tất
   Future<void> _releaseDriver() async {
     if (driverUid.isEmpty) return;
     try {
@@ -229,20 +279,41 @@ class DriverTripController {
           ? currentRide.value?.status == RideStatus.completed
           : currentDelivery.value?.status == DeliveryStatus.completed;
 
+      final double tripPrice = tripType == TripType.ride
+          ? (currentRide.value?.price ?? 0.0)
+          : (currentDelivery.value?.price ?? 0.0);
+
       final Map<String, dynamic> updateData = {
         'isBusy': false,
         'activeTripId': null,
         'lastActiveAt': FieldValue.serverTimestamp(),
       };
 
-      // Tăng tổng số chuyến hoàn thành
+      // Tăng tổng số chuyến và cộng dồn tiền vào số dư ví tài xế
       if (isCompleted) {
         updateData['totalTrips'] = FieldValue.increment(1);
+        if (tripPrice > 0) {
+          updateData['walletBalance'] = FieldValue.increment(tripPrice);
+        }
       }
 
       await _firestore.collection('drivers').doc(driverUid).update(updateData);
-    } catch (_) {
-      // Lỗi không critical — tài xế vẫn có thể tiếp tục dùng app
+
+      // Lưu lịch sử thu nhập vào collection driver_earnings
+      if (isCompleted && tripPrice > 0) {
+        await _firestore.collection('driver_earnings').add({
+          'driverId': driverUid,
+          'tripId': tripId,
+          'tripType': tripType == TripType.ride ? 'ride' : 'delivery',
+          'amount': tripPrice,
+          'description': tripType == TripType.ride
+              ? 'Thu nhập cuốc xe ôm'
+              : 'Thu nhập đơn giao hàng',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('[DriverTripController] Lỗi giải phóng tài xế/thu nhập: $e');
     }
   }
 

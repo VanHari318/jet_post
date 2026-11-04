@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
   late TabController _tabController;
   DriverModel? _driver;
   bool _isLoadingDriver = true;
+  StreamSubscription<DocumentSnapshot>? _driverSub;
 
   @override
   void initState() {
@@ -35,23 +37,26 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
 
   @override
   void dispose() {
+    _driverSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadDriverProfile() async {
+  void _loadDriverProfile() {
     if (_uid.isEmpty) return;
-    try {
-      final doc = await _firestore.collection('drivers').doc(_uid).get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _driver = DriverModel.fromFirestore(doc);
-          _isLoadingDriver = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingDriver = false);
-    }
+    _driverSub = _firestore.collection('drivers').doc(_uid).snapshots().listen(
+      (doc) {
+        if (doc.exists && mounted) {
+          setState(() {
+            _driver = DriverModel.fromFirestore(doc);
+            _isLoadingDriver = false;
+          });
+        }
+      },
+      onError: (_) {
+        if (mounted) setState(() => _isLoadingDriver = false);
+      },
+    );
   }
 
   @override
@@ -217,8 +222,7 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
           .collection('rides')
           .where('driverId', isEqualTo: _uid)
           .where('status', isEqualTo: RideStatus.completed.toFirestore())
-          .orderBy('completedAt', descending: true)
-          .limit(20)
+          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -239,7 +243,11 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
         }
 
         final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
+        final rides = docs.map((doc) => RideModel.fromFirestore(doc)).toList()
+          ..sort((a, b) =>
+              (b.completedAt ?? b.createdAt).compareTo(a.completedAt ?? a.createdAt));
+
+        if (rides.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -266,10 +274,10 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
 
         return ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: docs.length,
+          itemCount: rides.length,
           separatorBuilder: (_, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
-            final ride = RideModel.fromFirestore(docs[index]);
+            final ride = rides[index];
             return _buildRideHistoryCard(ride, isDark);
           },
         );
@@ -375,8 +383,7 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
           .collection('deliveries')
           .where('driverId', isEqualTo: _uid)
           .where('status', isEqualTo: DeliveryStatus.completed.toFirestore())
-          .orderBy('deliveredAt', descending: true)
-          .limit(20)
+          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -397,7 +404,13 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
         }
 
         final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
+        final deliveries = docs
+            .map((doc) => DeliveryModel.fromFirestore(doc))
+            .toList()
+          ..sort((a, b) =>
+              (b.deliveredAt ?? b.createdAt).compareTo(a.deliveredAt ?? a.createdAt));
+
+        if (deliveries.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -424,10 +437,10 @@ class _DriverIncomeScreenState extends State<DriverIncomeScreen>
 
         return ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: docs.length,
+          itemCount: deliveries.length,
           separatorBuilder: (_, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
-            final delivery = DeliveryModel.fromFirestore(docs[index]);
+            final delivery = deliveries[index];
             return _buildDeliveryHistoryCard(delivery, isDark);
           },
         );

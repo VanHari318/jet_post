@@ -42,6 +42,8 @@ class LiveTripStepper extends StatelessWidget {
         ? _buildRideSteps(rideStatus!)
         : _buildDeliverySteps(deliveryStatus!);
 
+    final isPending = rideStatus == RideStatus.pendingDriver ||
+        deliveryStatus == DeliveryStatus.pendingDriver;
     final isCompleted = rideStatus == RideStatus.completed ||
         deliveryStatus == DeliveryStatus.completed;
     final isCancelled = rideStatus == RideStatus.cancelled ||
@@ -72,11 +74,14 @@ class LiveTripStepper extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: isPending ? AppColors.warningBg : AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.timeline_rounded,
-                    color: AppColors.primary, size: 18),
+                child: Icon(
+                  isPending ? Icons.radar_rounded : Icons.timeline_rounded,
+                  color: isPending ? AppColors.warning : AppColors.primary,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -94,11 +99,46 @@ class LiveTripStepper extends StatelessWidget {
                 _statusBadge('Hoàn tất', AppColors.success, AppColors.successBg)
               else if (isCancelled)
                 _statusBadge('Đã hủy', AppColors.error, AppColors.errorBg)
+              else if (isPending)
+                _statusBadge('Đang tìm tài xế', AppColors.warning, AppColors.warningBg)
               else
                 _statusBadge('Đang diễn ra', AppColors.primary, AppColors.primaryLight),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          if (isPending)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.warningBg.withAlpha(50) : AppColors.warningBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.warning.withAlpha(80)),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Đang điều phối tài xế gần bạn nhất... Tiến trình sẽ kích hoạt khi tài xế nhận đơn.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppColors.warning : const Color(0xFF8D6E63),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ...List.generate(steps.length, (i) {
             final step = steps[i];
             final isLast = i == steps.length - 1;
@@ -163,6 +203,8 @@ class LiveTripStepper extends StatelessWidget {
 
   int _rideIndex(RideStatus status) {
     switch (status) {
+      case RideStatus.pendingDriver:
+        return -1;
       case RideStatus.accepted:
         return 0;
       case RideStatus.arrivedPickup:
@@ -172,7 +214,7 @@ class LiveTripStepper extends StatelessWidget {
       case RideStatus.completed:
         return 3;
       default:
-        return 0;
+        return -1;
     }
   }
 
@@ -212,6 +254,8 @@ class LiveTripStepper extends StatelessWidget {
 
   int _deliveryIndex(DeliveryStatus status) {
     switch (status) {
+      case DeliveryStatus.pendingDriver:
+        return -1;
       case DeliveryStatus.accepted:
         return 0;
       case DeliveryStatus.pickedUp:
@@ -221,7 +265,7 @@ class LiveTripStepper extends StatelessWidget {
       case DeliveryStatus.completed:
         return 3;
       default:
-        return 0;
+        return -1;
     }
   }
 }

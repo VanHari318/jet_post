@@ -24,7 +24,7 @@ class CustomerActivityScreen extends StatefulWidget {
 class _CustomerActivityScreenState extends State<CustomerActivityScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  final String _currentUserId = FirebaseService.currentUserId ?? '';
+  String get _currentUserId => FirebaseService.currentUserId ?? '';
 
   @override
   void initState() {
@@ -116,6 +116,27 @@ class _CustomerActivityScreenState extends State<CustomerActivityScreen>
                 stream: CustomerService.instance
                     .streamCustomerDeliveries(_currentUserId),
                 builder: (context, deliverySnapshot) {
+                  if ((rideSnapshot.connectionState == ConnectionState.waiting && !rideSnapshot.hasData) ||
+                      (deliverySnapshot.connectionState == ConnectionState.waiting && !deliverySnapshot.hasData)) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    );
+                  }
+
+                  if (rideSnapshot.hasError || deliverySnapshot.hasError) {
+                    final err = rideSnapshot.error ?? deliverySnapshot.error;
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          'Lỗi kết nối tải đơn hàng: $err',
+                          style: const TextStyle(color: AppColors.error),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
                   final rides = rideSnapshot.data ?? [];
                   final deliveries = deliverySnapshot.data ?? [];
 
@@ -165,7 +186,12 @@ class _CustomerActivityScreenState extends State<CustomerActivityScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hoạt Động Của Tôi'),
-        automaticallyImplyLeading: false,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         elevation: 0,
       ),
       body: body,
@@ -217,7 +243,7 @@ class _CustomerActivityScreenState extends State<CustomerActivityScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: allOrders.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = allOrders[index];
 

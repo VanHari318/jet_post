@@ -10,18 +10,14 @@ class PackageDetailCard extends StatelessWidget {
   /// Ghi chú bưu gửi (VD: "Hàng dễ vỡ, gọi trước")
   final String? packageNote;
 
-  /// Mã OTP bàn giao an toàn (hiện cho tài xế khi trạng thái inTransit)
-  final String? handoverOtp;
-
-  /// Có hiển thị OTP không (chỉ hiện khi đang giao hàng)
-  final bool showOtp;
+  /// Hiển thị lưu ý đối soát khi đang giao hàng
+  final bool showDeliveryNotice;
 
   const PackageDetailCard({
     super.key,
     required this.packageType,
     this.packageNote,
-    this.handoverOtp,
-    this.showOtp = false,
+    this.showDeliveryNotice = false,
   });
 
   @override
@@ -82,55 +78,40 @@ class PackageDetailCard extends StatelessWidget {
               ),
             ],
 
-            // ── Mã OTP bàn giao (chỉ hiện khi đang giao hàng) ────────────
-            if (showOtp && handoverOtp != null) ...[
+            // ── Lưu ý đối soát bàn giao khi đang giao hàng ────────────
+            if (showDeliveryNotice) ...[
               const SizedBox(height: 14),
               const Divider(height: 1),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.warningBg,
+                  color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: AppColors.warning.withAlpha(100), width: 1.5),
+                    color: AppColors.primary.withAlpha(80),
+                    width: 1,
+                  ),
                 ),
-                child: Column(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: const [
-                        Icon(Icons.lock_outline_rounded,
-                            color: AppColors.warning, size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          'Mã OTP Bàn Giao Hàng',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.warning,
-                          ),
+                  children: const [
+                    Icon(
+                      Icons.verified_user_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Khi đến nơi, hãy yêu cầu người nhận đọc Mã OTP 4 số và chụp ảnh bàn giao kiện hàng để hoàn tất.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      handoverOtp!,
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 10,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Đọc mã này cho người nhận nhập để xác nhận giao hàng thành công',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.warning.withAlpha(180),
-                        height: 1.4,
                       ),
                     ),
                   ],

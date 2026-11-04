@@ -12,15 +12,22 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/geo_calculator.dart';
 import '../../../core/utils/validators.dart';
 import '../../../models/saved_address_model.dart';
+import '../../../models/system_settings_model.dart';
 import '../../../models/user_model.dart';
 import '../../user/services/user_service.dart';
 import '../services/customer_service.dart';
 import '../widgets/quick_address_chips.dart';
-import 'live_tracking_screen.dart';
+import 'customer_activity_screen.dart';
 
 /// Màn hình Tạo Đơn Giao Hàng JetExpress (Task 1.2)
-/// Hỗ trợ phân loại bưu kiện, tính cước Upfront + phụ phí,
-/// tự động sinh Mã OTP 4 số bàn giao an toàn & chia sẻ hành trình qua SMS/Zalo.
+/// Hỗ trợ:
+/// - Khai báo chi tiết điểm lấy & giao (số nhà, phòng, tầng...)
+/// - Khối lượng bưu kiện (kg) + phụ phí theo kg (Admin cấu hình)
+/// - Phụ phí hàng dễ vỡ (+10k) & giao hỏa tốc (+20k) (Admin cấu hình)
+/// - Tiền thu hộ COD (tối đa 3.000.000 đ) & phân định người trả cước
+/// - Validate nghiêm ngặt (SĐT nhận != gửi, cự ly 100m - 40km, COD hợp lệ)
+/// - Mô hình Bể đơn hàng (Waiting Pool): Khách tạo đơn và có thể tiếp tục tạo đơn khác
+///   hoặc xem toàn bộ danh sách đơn đang chờ trong mục Hoạt động.
 class DeliveryBookingScreen extends StatefulWidget {
   final LatLng? initialPickup;
   final String? initialPickupAddress;
@@ -44,11 +51,15 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
 
   final TextEditingController _receiverNameController = TextEditingController();
   final TextEditingController _receiverPhoneController = TextEditingController();
+  final TextEditingController _pickupDetailController = TextEditingController();
+  final TextEditingController _dropoffDetailController = TextEditingController();
   final TextEditingController _packageNoteController = TextEditingController();
   final TextEditingController _dropoffSearchController = TextEditingController();
+  final TextEditingController _codController = TextEditingController();
   final FocusNode _dropoffFocusNode = FocusNode();
 
   UserModel? _currentUser;
+  SystemSettingsModel? _settings;
   LatLng _pickupLatLng = const LatLng(21.0285, 105.8542);
   String _pickupAddress = 'Đang xác định vị trí...';
   LatLng? _dropoffLatLng;
@@ -59,9 +70,16 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
   final Map<String, double> _packageTypes = {
     'Tài liệu': 0.0,
     'Đồ ăn / Thức uống': 0.0,
-    'Hàng nặng (>5kg)': 10000.0,
+    'Quần áo / Mỹ phẩm': 0.0,
+    'Đồ điện tử / Công nghệ': 5000.0,
     'Hàng cồng kềnh': 15000.0,
   };
+
+  // Cấu hình khối lượng & phụ phí
+  double _weightKg = 1.0;
+  bool _isFragile = false;
+  bool _isExpress = false;
+  String _payer = 'SENDER'; // SENDER | RECEIVER
 
   double _distanceKm = 0.0;
   double _durationMinutes = 0.0;
@@ -99,8 +117,11 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
     _dropoffFocusNode.dispose();
     _receiverNameController.dispose();
     _receiverPhoneController.dispose();
+    _pickupDetailController.dispose();
+    _dropoffDetailController.dispose();
     _packageNoteController.dispose();
     _dropoffSearchController.dispose();
+    _codController.dispose();
     super.dispose();
   }
 
@@ -110,6 +131,11 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
       _currentUser = await UserService.instance.getUserProfile(uid);
       setState(() {});
     }
+
+    try {
+      _settings = await CustomerService.instance.getSystemSettings();
+      setState(() {});
+    } catch (_) {}
 
     if (widget.initialPickup != null) {
       _pickupLatLng = widget.initialPickup!;
@@ -157,6 +183,9 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
 
       final price = await CustomerService.instance.calculateDeliveryPrice(
         result.distanceKm,
+        weightKg: _weightKg,
+        isFragile: _isFragile,
+        isExpress: _isExpress,
         packageSurcharge: _packageSurcharge,
       );
 
@@ -252,19 +281,17 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
         context,
         title: 'Điểm Giao Trùng Điểm Lấy',
         message:
-            'Địa chỉ đã lưu này trùng với vị trí lấy hàng hiện tại của bạn. Vui lòng chọn địa chỉ khác!',
+            'Địa chỉ lưu sẵn này trùng với điểm lấy hàng (${distMeters.toStringAsFixed(0)}m). Vui lòng chọn địa chỉ khác!',
       );
       return;
     }
 
     setState(() {
       _dropoffLatLng = LatLng(addr.lat, addr.lng);
-      _dropoffAddress = addr.addressText;
-      _dropoffSearchController.text = addr.addressText;
+      _dropoffAddress = '${addr.label.toFirestore()} - ${addr.addressText}';
+      _dropoffSearchController.text = _dropoffAddress!;
       _showSuggestions = false;
-      _placeSearchResults = [];
     });
-    _dropoffFocusNode.unfocus();
     _calculateRoute();
   }
 
@@ -311,8 +338,23 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
 
     if (_dropoffLatLng == null) {
       AppDialogs.showError(context,
-          title: 'Chưa Chọn Địa Chỉ Giao',
-          message: 'Vui lòng chọn địa chỉ giao hàng cho người nhận.');
+          title: 'Chưa Chọn Điểm Giao Hàng',
+          message: 'Vui lòng tìm kiếm hoặc chọn địa chỉ giao hàng cho người nhận.');
+      return;
+    }
+
+    if (_distanceKm < 0.1) {
+      AppDialogs.showWarning(context,
+          title: 'Khoảng Cách Quá Gần',
+          message: 'Khoảng cách giao hàng phải từ 100m trở lên. Vui lòng kiểm tra lại điểm lấy và giao!');
+      return;
+    }
+
+    if (_distanceKm > 40.0) {
+      AppDialogs.showWarning(context,
+          title: 'Vượt Quá Giới Hạn Cự Ly',
+          message:
+              'JetPost hiện tại phục vụ giao hàng nội thành trong bán kính tối đa 40km. Cự ly chuyến này là ${_distanceKm.toStringAsFixed(1)}km.');
       return;
     }
 
@@ -323,13 +365,40 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
       return;
     }
 
+    final rawReceiverPhone = _receiverPhoneController.text.trim();
+    final formattedReceiverPhone =
+        UserService.instance.formatToE164(rawReceiverPhone);
+
+    if (user.phone.isNotEmpty &&
+        (formattedReceiverPhone == user.phone ||
+            rawReceiverPhone == user.phone)) {
+      AppDialogs.showWarning(
+        context,
+        title: 'SĐT Người Nhận Trùng Người Gửi',
+        message:
+            'Số điện thoại người nhận không thể trùng với số điện thoại của bạn (${user.phone}). Vui lòng nhập số điện thoại người nhận thực tế!',
+      );
+      return;
+    }
+
+    double codAmount = 0.0;
+    final codText = _codController.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
+    if (codText.isNotEmpty) {
+      codAmount = double.tryParse(codText) ?? 0.0;
+      if (codAmount > 3000000.0) {
+        AppDialogs.showWarning(
+          context,
+          title: 'Vượt Hạn Mức COD',
+          message:
+              'Hạn mức thu hộ COD tối đa là 3.000.000 đ cho mỗi bưu phẩm. Vui lòng điều chỉnh lại số tiền thu hộ!',
+        );
+        return;
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
-      final rawReceiverPhone = _receiverPhoneController.text.trim();
-      final formattedReceiverPhone =
-          UserService.instance.formatToE164(rawReceiverPhone);
-
       final deliveryId = await CustomerService.instance.createDeliveryBooking(
         senderId: user.id,
         senderName: user.fullName,
@@ -341,19 +410,29 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
             ? _packageNoteController.text.trim()
             : null,
         pickupAddress: _pickupAddress,
+        pickupDetail: _pickupDetailController.text.trim().isNotEmpty
+            ? _pickupDetailController.text.trim()
+            : null,
         pickupLat: _pickupLatLng.latitude,
         pickupLng: _pickupLatLng.longitude,
         dropoffAddress: _dropoffAddress!,
+        dropoffDetail: _dropoffDetailController.text.trim().isNotEmpty
+            ? _dropoffDetailController.text.trim()
+            : null,
         dropoffLat: _dropoffLatLng!.latitude,
         dropoffLng: _dropoffLatLng!.longitude,
         distanceKm: _distanceKm,
+        weightKg: _weightKg,
+        isFragile: _isFragile,
+        isExpress: _isExpress,
+        payer: _payer,
         price: _estimatedPrice,
+        codAmount: codAmount,
       );
 
       if (!mounted) return;
       setState(() => _isSubmitting = false);
 
-      // Hiển thị dialog xác nhận thành công và sinh link chia sẻ hành trình
       _showDeliverySuccessDialog(deliveryId, formattedReceiverPhone);
     } catch (e) {
       if (!mounted) return;
@@ -361,6 +440,28 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
       AppDialogs.showError(context,
           title: 'Lỗi Tạo Đơn Hàng', message: '$e');
     }
+  }
+
+  void _resetFormForNewOrder() {
+    _receiverNameController.clear();
+    _receiverPhoneController.clear();
+    _dropoffDetailController.clear();
+    _packageNoteController.clear();
+    _dropoffSearchController.clear();
+    _codController.clear();
+    setState(() {
+      _dropoffLatLng = null;
+      _dropoffAddress = null;
+      _distanceKm = 0.0;
+      _durationMinutes = 0.0;
+      _estimatedPrice = 0.0;
+      _weightKg = 1.0;
+      _isFragile = false;
+      _isExpress = false;
+      _payer = 'SENDER';
+      _selectedPackageType = 'Tài liệu';
+      _packageSurcharge = 0.0;
+    });
   }
 
   void _showDeliverySuccessDialog(String deliveryId, String receiverPhone) {
@@ -379,8 +480,10 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
               Icon(Icons.check_circle_rounded,
                   color: AppColors.secondary, size: 28),
               SizedBox(width: 10),
-              Text('Tạo Đơn Thành Công!',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              Expanded(
+                child: Text('Đã Thêm Vào Danh Sách Chờ!',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
             ],
           ),
           content: Column(
@@ -388,7 +491,7 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Đơn giao hàng JetExpress đã được gửi lên hệ thống và đang quét tìm tài xế lân cận.',
+                'Đơn giao hàng JetExpress đã được đưa vào Bể chờ nhận (Waiting Pool). Các tài xế lân cận đang quét và tiếp nhận đơn của bạn.',
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark
@@ -429,18 +532,18 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Nút chia sẻ hành trình qua tin nhắn Zalo / SMS (Task 1.2 Luồng 4)
+              // Nút chia sẻ SMS cho người nhận
               OutlinedButton.icon(
                 onPressed: () async {
                   final text =
-                      'Xin chào! Tôi vừa gửi bưu phẩm qua JetPost cho bạn. Mã đơn hàng: ${deliveryId.substring(0, 8).toUpperCase()}. Bạn có thể theo dõi trên ứng dụng JetPost!';
+                      'Xin chào! Tôi vừa gửi bưu phẩm qua JetPost cho bạn. Mã đơn hàng: ${deliveryId.substring(0, 8).toUpperCase()}. Bạn có thể theo dõi tiến trình trực tiếp trên ứng dụng JetPost!';
                   final uri = Uri.parse('sms:$receiverPhone?body=${Uri.encodeComponent(text)}');
                   if (await canLaunchUrl(uri)) {
                     await launchUrl(uri);
                   }
                 },
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                   side: const BorderSide(color: AppColors.secondary),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -449,7 +552,7 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                 icon: const Icon(Icons.share,
                     size: 16, color: AppColors.secondary),
                 label: const Text(
-                  'Chia Sẻ Tin Nhắn Cho Người Nhận',
+                  'Chia Sẻ SMS Cho Người Nhận',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -459,15 +562,33 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
               ),
             ],
           ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
           actions: [
-            ElevatedButton(
+            // Nút 1: Tạo thêm đơn khác (cộng dồn danh sách chờ)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _resetFormForNewOrder();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Đơn trước đã vào danh sách chờ. Mời bạn tiếp tục tạo đơn mới!'),
+                    backgroundColor: AppColors.success,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.add_task_rounded, size: 18),
+              label: const Text('Tạo Đơn Khác'),
+            ),
+
+            // Nút 2: Xem danh sách chờ trong tab Hoạt động
+            ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        LiveTrackingScreen.delivery(deliveryId: deliveryId),
+                    builder: (_) => const CustomerActivityScreen(showAppBar: true),
                   ),
                 );
               },
@@ -478,7 +599,8 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Theo Dõi Hành Trình'),
+              icon: const Icon(Icons.list_alt_rounded, size: 18),
+              label: const Text('Xem Danh Sách'),
             ),
           ],
         );
@@ -490,6 +612,9 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final pricePerKg = _settings?.pricePerKgDelivery ?? 10000.0;
+    final fragileFee = _settings?.fragileSurcharge ?? 10000.0;
+    final expressFee = _settings?.expressSurcharge ?? 20000.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -511,7 +636,7 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
             left: 16,
             right: 16,
             top: 12,
-            bottom: bottomPadding + 90,
+            bottom: bottomPadding + 140,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,7 +690,24 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                         ),
                       ],
                     ),
-                    const Divider(height: 16),
+                    const SizedBox(height: 8),
+
+                    // Chi tiết điểm lấy (Số nhà, tầng, phòng)
+                    TextFormField(
+                      controller: _pickupDetailController,
+                      decoration: InputDecoration(
+                        hintText: 'Chi tiết điểm lấy: Số nhà, tòa nhà, tầng, phòng...',
+                        prefixIcon: const Icon(Icons.home_work_outlined, size: 18),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+
+                    const Divider(height: 20),
 
                     // Điểm giao hàng (Ô tìm kiếm)
                     Row(
@@ -621,6 +763,24 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                           ),
                       ],
                     ),
+
+                    // Chi tiết điểm giao (Căn hộ, số phòng, chỉ dẫn)
+                    if (_dropoffLatLng != null) ...[
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _dropoffDetailController,
+                        decoration: InputDecoration(
+                          hintText: 'Chi tiết điểm giao: Tòa nhà, căn hộ, số tầng...',
+                          prefixIcon: const Icon(Icons.apartment_rounded, size: 18),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        style: const TextStyle(fontSize: 12.5),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -678,153 +838,149 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                               child: const Padding(
                                 padding: EdgeInsets.all(4),
                                 child: Icon(Icons.close,
-                                    size: 16, color: Colors.grey),
+                                    size: 18, color: Colors.grey),
                               ),
                             ),
                           ],
                         ),
                       ),
                       const Divider(height: 1),
-
-                      // Trạng thái Loading
-                      if (_isSearchingPlace)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.secondary,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Text(
-                                'Đang tìm kiếm địa chỉ quanh bạn...',
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: AppColors.textSecondaryLight,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      // Trạng thái Empty
-                      else if (_placeSearchResults.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 16),
-                          child: Column(
-                            children: [
-                              const Icon(Icons.location_off_outlined,
-                                  color: Colors.grey, size: 28),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Không tìm thấy "${_dropoffSearchController.text.trim()}"',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Vui lòng gõ thêm tên đường, phường hoặc quận để tìm kiếm chính xác hơn.',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
-                      else
                       Flexible(
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          padding: EdgeInsets.zero,
-                          itemCount: _placeSearchResults.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 1, indent: 56),
-                          itemBuilder: (context, i) {
-                            final p = _placeSearchResults[i];
-                            final distKm = GeoCalculator.distanceInKm(
-                              _pickupLatLng.latitude,
-                              _pickupLatLng.longitude,
-                              p.latitude,
-                              p.longitude,
-                            );
-
-                            return ListTile(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 2),
-                              leading: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: _getCategoryColor(p.category)
-                                      .withAlpha(24),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  _getCategoryIcon(p.category),
-                                  color: _getCategoryColor(p.category),
-                                  size: 18,
-                                ),
-                              ),
-                              title: Text(
-                                p.title,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                p.subtitle,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: distKm > 0.05
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? AppColors.surfaceDark
-                                            : AppColors.secondary
-                                                .withAlpha(18),
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                        child: _isSearchingPlace
+                            ? const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppColors.secondary),
                                       ),
-                                      child: Text(
-                                        '${distKm.toStringAsFixed(1)} km',
-                                        style: const TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.secondary,
+                                      SizedBox(width: 12),
+                                      Text(
+                                        'Đang tìm kiếm quanh bạn...',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                          fontStyle: FontStyle.italic,
                                         ),
                                       ),
-                                    )
-                                  : null,
-                              onTap: () => _selectDropoffPlace(p),
-                            );
-                          },
-                        ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : _placeSearchResults.isEmpty
+                                ? Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 24, horizontal: 16),
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.search_off_rounded,
+                                              size: 32,
+                                              color: Colors.grey.withAlpha(160)),
+                                          const SizedBox(height: 8),
+                                          const Text(
+                                            'Không tìm thấy địa điểm phù hợp',
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Thử gõ tên đường, số nhà hoặc địa danh lớn hơn',
+                                            style: TextStyle(
+                                                fontSize: 11, color: Colors.grey),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    shrinkWrap: true,
+                                    padding: EdgeInsets.zero,
+                                    itemCount: _placeSearchResults.length,
+                                    separatorBuilder: (_, _) =>
+                                        const Divider(height: 1, indent: 56),
+                                    itemBuilder: (context, i) {
+                                      final p = _placeSearchResults[i];
+                                      final distKm = GeoCalculator.distanceInKm(
+                                        _pickupLatLng.latitude,
+                                        _pickupLatLng.longitude,
+                                        p.latitude,
+                                        p.longitude,
+                                      );
+
+                                      return ListTile(
+                                        dense: true,
+                                        contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 2),
+                                        leading: Container(
+                                          width: 36,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: _getCategoryColor(p.category)
+                                                .withAlpha(24),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            _getCategoryIcon(p.category),
+                                            color: _getCategoryColor(p.category),
+                                            size: 18,
+                                          ),
+                                        ),
+                                        title: Text(
+                                          p.title,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        subtitle: Text(
+                                          p.subtitle,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? AppColors.textSecondaryDark
+                                                : AppColors.textSecondaryLight,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        trailing: distKm > 0.05
+                                            ? Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: isDark
+                                                      ? AppColors.surfaceDark
+                                                      : AppColors.secondary
+                                                          .withAlpha(18),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child: Text(
+                                                  '${distKm.toStringAsFixed(1)} km',
+                                                  style: const TextStyle(
+                                                    fontSize: 10.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.secondary,
+                                                  ),
+                                                ),
+                                              )
+                                            : null,
+                                        onTap: () => _selectDropoffPlace(p),
+                                      );
+                                    },
+                                  ),
                       ),
                     ],
                   ),
@@ -859,7 +1015,7 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                     TextFormField(
                       controller: _receiverNameController,
                       decoration: InputDecoration(
-                        labelText: 'Họ tên người nhận',
+                        labelText: 'Họ tên người nhận *',
                         prefixIcon: const Icon(Icons.person_outline, size: 20),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -870,6 +1026,9 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                         if (val == null || val.trim().isEmpty) {
                           return 'Vui lòng nhập tên người nhận';
                         }
+                        if (val.trim().length < 2) {
+                          return 'Tên người nhận phải có ít nhất 2 ký tự';
+                        }
                         return null;
                       },
                     ),
@@ -878,14 +1037,24 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                       controller: _receiverPhoneController,
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
-                        labelText: 'Số điện thoại người nhận',
+                        labelText: 'Số điện thoại người nhận *',
                         prefixIcon: const Icon(Icons.phone_outlined, size: 20),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                         isDense: true,
+                        helperText: 'Dùng để tài xế liên hệ & gửi mã OTP nhận hàng',
                       ),
-                      validator: AppValidators.validatePhone,
+                      validator: (val) {
+                        final phoneErr = AppValidators.validatePhone(val);
+                        if (phoneErr != null) return phoneErr;
+                        if (_currentUser != null &&
+                            val != null &&
+                            val.trim() == _currentUser!.phone) {
+                          return 'SĐT người nhận không được trùng với SĐT người gửi';
+                        }
+                        return null;
+                      },
                     ),
                   ],
                 ),
@@ -893,9 +1062,9 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
 
               const SizedBox(height: 20),
 
-              // 3. THÔNG TIN BƯU PHẨM & PHỤ PHÍ
+              // 3. THÔNG TIN BƯU PHẨM, KHỐI LƯỢNG & PHỤ PHÍ
               _buildSectionTitle(
-                  '3. Thông Tin Bưu Phẩm', Icons.inventory_2_rounded),
+                  '3. Thông Tin Bưu Phẩm & Cước Phí', Icons.inventory_2_rounded),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -946,13 +1115,126 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
 
+                    // Khối lượng hàng hóa (kg)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Khối lượng bưu kiện:',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '+${CurrencyFormatter.format(pricePerKg)} / mỗi 1 kg',
+                              style: const TextStyle(fontSize: 11, color: AppColors.secondary),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.withAlpha(100)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove, size: 18),
+                                onPressed: _weightKg > 0.5
+                                    ? () {
+                                        setState(() {
+                                          _weightKg = (_weightKg - 0.5).clamp(0.5, 30.0);
+                                        });
+                                        _calculateRoute();
+                                      }
+                                    : null,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  '${_weightKg.toStringAsFixed(1)} kg',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.add, size: 18),
+                                onPressed: _weightKg < 30.0
+                                    ? () {
+                                        setState(() {
+                                          _weightKg = (_weightKg + 0.5).clamp(0.5, 30.0);
+                                        });
+                                        _calculateRoute();
+                                      }
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const Divider(height: 24),
+
+                    // Tùy chọn Phụ phí Dễ Vỡ
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _isFragile,
+                      activeThumbColor: Colors.orange,
+                      title: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              color: Colors.orange, size: 20),
+                          SizedBox(width: 8),
+                          Text('Hàng dễ vỡ, xin nhẹ tay',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      subtitle: Text(
+                        'Phụ phí bảo quản an toàn (+${CurrencyFormatter.format(fragileFee)})',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      onChanged: (val) {
+                        setState(() => _isFragile = val);
+                        _calculateRoute();
+                      },
+                    ),
+
+                    // Tùy chọn Phụ phí Hỏa Tốc
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _isExpress,
+                      activeThumbColor: AppColors.secondary,
+                      title: const Row(
+                        children: [
+                          Icon(Icons.bolt_rounded,
+                              color: AppColors.secondary, size: 20),
+                          SizedBox(width: 8),
+                          Text('Giao hỏa tốc ưu tiên',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      subtitle: Text(
+                        'Điều phối tài xế nhanh nhất, giao thẳng trong 1h (+${CurrencyFormatter.format(expressFee)})',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      onChanged: (val) {
+                        setState(() => _isExpress = val);
+                        _calculateRoute();
+                      },
+                    ),
+
+                    const SizedBox(height: 10),
                     TextFormField(
                       controller: _packageNoteController,
                       decoration: InputDecoration(
                         labelText: 'Ghi chú cho tài xế (Không bắt buộc)',
-                        hintText: 'VD: Hàng dễ vỡ, gọi điện trước khi giao...',
+                        hintText: 'VD: Gọi trước khi đến 10 phút, hàng cồng kềnh...',
                         prefixIcon:
                             const Icon(Icons.edit_note_outlined, size: 22),
                         border: OutlineInputBorder(
@@ -961,6 +1243,67 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                         isDense: true,
                       ),
                       maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // 4. THANH TOÁN & THU HỘ COD
+              _buildSectionTitle(
+                  '4. Thanh Toán & Thu Hộ COD', Icons.payments_rounded),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Người thanh toán cước phí:',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'SENDER',
+                          label: Text('Người gửi trả cước', style: TextStyle(fontSize: 12)),
+                          icon: Icon(Icons.person_outline, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: 'RECEIVER',
+                          label: Text('Người nhận trả cước', style: TextStyle(fontSize: 12)),
+                          icon: Icon(Icons.person_pin_circle_outlined, size: 16),
+                        ),
+                      ],
+                      selected: {_payer},
+                      onSelectionChanged: (set) {
+                        setState(() => _payer = set.first);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Ô nhập tiền COD
+                    TextFormField(
+                      controller: _codController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        labelText: 'Tiền thu hộ COD (VNĐ)',
+                        hintText: '0 (để trống nếu không thu hộ)',
+                        prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        isDense: true,
+                        helperText: 'Tối đa 3.000.000 đ. Tài xế sẽ thu tiền mặt khi giao hàng',
+                      ),
                     ),
                   ],
                 ),
@@ -998,8 +1341,10 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Tổng cước hỏa tốc:',
-                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      _isExpress ? 'Tổng cước Hỏa Tốc:' : 'Tổng cước Giao Hàng:',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                     const SizedBox(height: 2),
                     _isCalculatingRoute
                         ? const SizedBox(
@@ -1010,7 +1355,7 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                         : Text(
                             CurrencyFormatter.format(_estimatedPrice),
                             style: const TextStyle(
-                              fontSize: 18,
+                              fontSize: 19,
                               fontWeight: FontWeight.bold,
                               color: AppColors.secondary,
                             ),
@@ -1018,14 +1363,22 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                   ],
                 ),
                 if (_distanceKm > 0)
-                  Text(
-                    '$_distanceKm km • ${_durationMinutes.toStringAsFixed(0)} phút',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${_distanceKm.toStringAsFixed(1)} km • ${_durationMinutes.toStringAsFixed(0)} phút',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'KL: ${_weightKg}kg ${_isFragile ? '• Dễ vỡ' : ''} ${_isExpress ? '• Hỏa tốc' : ''}',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -1055,7 +1408,7 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
                         ),
                       )
                     : const Text(
-                        'TẠO ĐƠN GIAO HÀNG JETEXPRESS',
+                        'XÁC NHẬN TẠO ĐƠN GIAO HÀNG',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -1087,4 +1440,3 @@ class _DeliveryBookingScreenState extends State<DeliveryBookingScreen> {
     );
   }
 }
-

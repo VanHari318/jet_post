@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -21,13 +20,11 @@ class LiveTrackingScreen extends StatefulWidget {
   final String? rideId;
   final String? deliveryId;
 
-  const LiveTrackingScreen.ride({super.key, required String rideId})
-      : rideId = rideId,
-        deliveryId = null;
+  const LiveTrackingScreen.ride({super.key, required this.rideId})
+      : deliveryId = null;
 
-  const LiveTrackingScreen.delivery({super.key, required String deliveryId})
-      : deliveryId = deliveryId,
-        rideId = null;
+  const LiveTrackingScreen.delivery({super.key, required this.deliveryId})
+      : rideId = null;
 
   bool get isDelivery => deliveryId != null;
 
@@ -186,7 +183,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             driverPlate: delivery.driverPlate,
             deliveryStatus: delivery.status,
             handoverOtp: delivery.handoverOtp,
-            canCancel: delivery.status == DeliveryStatus.accepted ||
+            canCancel: delivery.status == DeliveryStatus.pendingDriver ||
+                delivery.status == DeliveryStatus.accepted ||
                 delivery.status == DeliveryStatus.pickedUp,
           );
         },
@@ -228,7 +226,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             driverPhone: ride.driverPhone,
             driverPlate: ride.driverPlate,
             rideStatus: ride.status,
-            canCancel: ride.status == RideStatus.accepted ||
+            canCancel: ride.status == RideStatus.pendingDriver ||
+                ride.status == RideStatus.accepted ||
                 ride.status == RideStatus.arrivedPickup,
           );
         },
@@ -450,13 +449,24 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       const SizedBox(height: 12),
                     ],
 
-                    // Thẻ thông tin tài xế & Liên lạc P2P
-                    DriverContactCard(
-                      driverName: driverName,
-                      driverPhone: driverPhone,
-                      driverPlate: driverPlate,
-                      currentCustomerId: _currentCustomerId,
-                    ),
+                    // Thẻ thông tin tài xế & Liên lạc P2P hoặc Thẻ Chờ Điều Phối
+                    if (driverId != null &&
+                        driverId.isNotEmpty &&
+                        rideStatus != RideStatus.pendingDriver &&
+                        deliveryStatus != DeliveryStatus.pendingDriver)
+                      DriverContactCard(
+                        driverId: driverId,
+                        driverName: driverName,
+                        driverPhone: driverPhone,
+                        driverPlate: driverPlate,
+                        currentCustomerId: _currentCustomerId,
+                      )
+                    else
+                      _PendingDriverCard(
+                        isDelivery: isDelivery,
+                        pickupAddress: pickupAddress,
+                        dropoffAddress: dropoffAddress,
+                      ),
                     const SizedBox(height: 14),
 
                     // Trip Stepper tiến trình
@@ -490,6 +500,124 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Thẻ trạng thái đang tìm kiếm / điều phối tài xế gần nhất
+class _PendingDriverCard extends StatelessWidget {
+  final bool isDelivery;
+  final String pickupAddress;
+  final String dropoffAddress;
+
+  const _PendingDriverCard({
+    required this.isDelivery,
+    required this.pickupAddress,
+    required this.dropoffAddress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.warning.withAlpha(isDark ? 80 : 100),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.warning.withAlpha(20),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: AppColors.warningBg,
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Đang Tìm Tài Xế...',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      isDelivery
+                          ? 'Đang gửi yêu cầu giao hàng đến tài xế lân cận'
+                          : 'Đang tìm xe ôm gần bạn nhất để đón',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : AppColors.backgroundLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded,
+                    size: 16, color: AppColors.warning),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Bạn có thể thu nhỏ ứng dụng hoặc hủy yêu cầu bất cứ lúc nào.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? AppColors.textMutedDark
+                          : AppColors.textMutedLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

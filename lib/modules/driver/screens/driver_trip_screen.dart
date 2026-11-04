@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
+import '../../../core/network/openroute_client.dart';
 import '../../../models/ride_model.dart';
 import '../../../models/delivery_model.dart';
 import '../controllers/driver_trip_controller.dart';
@@ -168,17 +169,49 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     if (firstPosition && _mapReady) _fitMapBounds();
   }
 
+  bool _isValidCoord(double? lat, double? lng) {
+    if (lat == null || lng == null) return false;
+    return lat.abs() > 0.5 && lng.abs() > 0.5;
+  }
+
+  Future<void> _updateRoutePolyline(LatLng start, LatLng end) async {
+    try {
+      final route = await OpenRouteClient.getDirections(start, end);
+      if (mounted && route.polylinePoints.isNotEmpty) {
+        setState(() {
+          _routePoints = route.polylinePoints;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _routePoints = [start, end];
+        });
+      }
+    }
+  }
+
   void _onRideChanged() {
     final ride = _controller.currentRide.value;
     if (ride == null || !mounted) return;
 
+    final pValid = _isValidCoord(ride.pickupLat, ride.pickupLng);
+    final dValid = _isValidCoord(ride.dropoffLat, ride.dropoffLng);
+    final pPos = pValid ? LatLng(ride.pickupLat, ride.pickupLng) : null;
+    final dPos = dValid ? LatLng(ride.dropoffLat, ride.dropoffLng) : null;
+
     setState(() {
-      _pickupPos = LatLng(ride.pickupLat, ride.pickupLng);
-      _dropoffPos = LatLng(ride.dropoffLat, ride.dropoffLng);
-      _routePoints = [_pickupPos!, _dropoffPos!];
+      _pickupPos = pPos;
+      _dropoffPos = dPos;
     });
 
-    // Zoom bản đồ về khu vực chuyến đi
+    if (pPos != null && dPos != null) {
+      unawaited(_updateRoutePolyline(pPos, dPos));
+    } else {
+      _routePoints = [];
+    }
+
+    // Zoom bản đồ về khu vực chuyến đi an toàn
     _fitMapBounds();
 
     // Khi hoàn thành hoặc huỷ → về dashboard sau 2 giây
@@ -192,11 +225,21 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     final delivery = _controller.currentDelivery.value;
     if (delivery == null || !mounted) return;
 
+    final pValid = _isValidCoord(delivery.pickupLat, delivery.pickupLng);
+    final dValid = _isValidCoord(delivery.dropoffLat, delivery.dropoffLng);
+    final pPos = pValid ? LatLng(delivery.pickupLat, delivery.pickupLng) : null;
+    final dPos = dValid ? LatLng(delivery.dropoffLat, delivery.dropoffLng) : null;
+
     setState(() {
-      _pickupPos = LatLng(delivery.pickupLat, delivery.pickupLng);
-      _dropoffPos = LatLng(delivery.dropoffLat, delivery.dropoffLng);
-      _routePoints = [_pickupPos!, _dropoffPos!];
+      _pickupPos = pPos;
+      _dropoffPos = dPos;
     });
+
+    if (pPos != null && dPos != null) {
+      unawaited(_updateRoutePolyline(pPos, dPos));
+    } else {
+      _routePoints = [];
+    }
 
     _fitMapBounds();
 
@@ -220,13 +263,37 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     }
   }
 
-  /// Zoom bản đồ hiển thị cả điểm A và điểm B
+  int _tileErrorCount = 0;
+
+  /// Zoom bản đồ an toàn — loại bỏ hoàn toàn tọa độ (0, 0)
   void _fitMapBounds() {
-    if (!_mapReady || _pickupPos == null || _dropoffPos == null) return;
-    final bounds = LatLngBounds.fromPoints([_pickupPos!, _dropoffPos!]);
-    _mapController.fitCamera(
-      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)),
-    );
+    if (!_mapReady) return;
+    final validPoints = <LatLng>[];
+
+    if (_driverPos != null &&
+        _isValidCoord(_driverPos!.latitude, _driverPos!.longitude)) {
+      validPoints.add(_driverPos!);
+    }
+    if (_pickupPos != null &&
+        _isValidCoord(_pickupPos!.latitude, _pickupPos!.longitude)) {
+      validPoints.add(_pickupPos!);
+    }
+    if (_dropoffPos != null &&
+        _isValidCoord(_dropoffPos!.latitude, _dropoffPos!.longitude)) {
+      validPoints.add(_dropoffPos!);
+    }
+
+    if (validPoints.length >= 2) {
+      final bounds = LatLngBounds.fromPoints(validPoints);
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.fromLTRB(40, 120, 40, 40),
+        ),
+      );
+    } else if (validPoints.length == 1) {
+      _mapController.move(validPoints.first, 15);
+    }
   }
 
   /// Về màn hình Dashboard sau 2 giây (khi hoàn thành/huỷ)
@@ -335,11 +402,12 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
         TileLayer(
           key: ValueKey(_mapReloadToken),
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          fallbackUrl: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.jet_post',
+          fallbackUrl: 'https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.example.jet_post/1.0',
           maxZoom: 19,
           errorTileCallback: (_, _, _) {
-            if (mounted && !_mapHasError) {
+            _tileErrorCount++;
+            if (mounted && !_mapHasError && _tileErrorCount >= 6) {
               setState(() => _mapHasError = true);
             }
           },
@@ -383,7 +451,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               ),
             ),
             // Marker điểm đón / lấy hàng (A)
-            if (_pickupPos != null)
+            if (_pickupPos != null &&
+                _isValidCoord(_pickupPos!.latitude, _pickupPos!.longitude))
               Marker(
                 point: _pickupPos!,
                 width: 40,
@@ -395,7 +464,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                 ),
               ),
             // Marker điểm đến (B)
-            if (_dropoffPos != null)
+            if (_dropoffPos != null &&
+                _isValidCoord(_dropoffPos!.latitude, _dropoffPos!.longitude))
               Marker(
                 point: _dropoffPos!,
                 width: 40,
@@ -442,6 +512,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               onPressed: () {
                 setState(() {
                   _mapHasError = false;
+                  _tileErrorCount = 0;
                   _mapReloadToken++;
                 });
               },
@@ -618,8 +689,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                   : PackageDetailCard(
                       packageType: delivery.packageType,
                       packageNote: delivery.packageNote,
-                      handoverOtp: delivery.handoverOtp,
-                      showOtp: delivery.status == DeliveryStatus.inTransit,
+                      showDeliveryNotice:
+                          delivery.status == DeliveryStatus.inTransit,
                     ),
             ),
 
@@ -630,6 +701,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               builder: (_, ride, _) => ride == null
                   ? const SizedBox.shrink()
                   : ContactCard.ride(
+                      driverUid: _driverUid,
+                      customerId: ride.customerId,
                       customerName: ride.customerName,
                       customerPhone: ride.customerPhone,
                     ),
@@ -640,6 +713,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               builder: (_, delivery, _) => delivery == null
                   ? const SizedBox.shrink()
                   : ContactCard.delivery(
+                      driverUid: _driverUid,
+                      senderId: delivery.senderId,
                       senderName: delivery.senderName,
                       senderPhone: delivery.senderPhone,
                       receiverName: delivery.receiverName,

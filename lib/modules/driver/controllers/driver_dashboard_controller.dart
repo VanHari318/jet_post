@@ -282,7 +282,7 @@ class DriverDashboardController {
 
   // ── Nhận Cuốc Xe Ôm ───────────────────────────────────────────────────────
 
-  /// Tài xế chấp nhận cuốc xe ôm
+  /// Tài xế chấp nhận cuốc xe ôm với cơ chế Transaction chống tranh chấp đơn
   Future<bool> acceptRide(RideModel ride) async {
     if (_uid.isEmpty || driverModel.value == null) return false;
     final driver = driverModel.value!;
@@ -296,38 +296,48 @@ class DriverDashboardController {
     }
 
     try {
-      final batch = _firestore.batch();
       final rideRef = _firestore.collection('rides').doc(ride.id);
       final driverRef = _firestore.collection('drivers').doc(_uid);
 
-      // Cập nhật trạng thái cuốc xe
-      batch.update(rideRef, {
-        'status': RideStatus.accepted.toFirestore(),
-        'driverId': _uid,
-        'driverName': user?.fullName ?? driver.id,
-        'driverPhone': user?.phone ?? '',
-        'driverPlate': driver.plateNumber,
-        'acceptedAt': FieldValue.serverTimestamp(),
+      await _firestore.runTransaction((transaction) async {
+        final rideSnap = await transaction.get(rideRef);
+        if (!rideSnap.exists) {
+          throw 'Đơn hàng không còn tồn tại hoặc đã bị hủy!';
+        }
+        final status = rideSnap.get('status') as String?;
+        if (status != RideStatus.pendingDriver.toFirestore()) {
+          throw 'Đơn hàng này đã được tài xế khác tiếp nhận!';
+        }
+
+        transaction.update(rideRef, {
+          'status': RideStatus.accepted.toFirestore(),
+          'driverId': _uid,
+          'driverName': user?.fullName ?? driver.id,
+          'driverPhone': user?.phone ?? '',
+          'driverPlate': driver.plateNumber,
+          'acceptedAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.update(driverRef, {
+          'isBusy': true,
+          'activeTripId': ride.id,
+          'lastActiveAt': FieldValue.serverTimestamp(),
+        });
       });
 
-      // Đánh dấu tài xế đang bận
-      batch.update(driverRef, {
-        'isBusy': true,
-        'activeTripId': ride.id,
-        'lastActiveAt': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
       return true;
     } catch (e) {
-      errorMessage.value = 'Không thể nhận cuốc. Vui lòng thử lại.';
+      final msg = e.toString().replaceAll('Exception: ', '');
+      errorMessage.value = msg.contains('tiếp nhận') || msg.contains('hủy')
+          ? msg
+          : 'Không thể nhận cuốc. Vui lòng thử lại.';
       return false;
     }
   }
 
   // ── Nhận Đơn Giao Hàng ───────────────────────────────────────────────────
 
-  /// Tài xế chấp nhận đơn giao hàng
+  /// Tài xế chấp nhận đơn giao hàng với cơ chế Transaction chống tranh chấp đơn
   Future<bool> acceptDelivery(DeliveryModel delivery) async {
     if (_uid.isEmpty || driverModel.value == null) return false;
     final driver = driverModel.value!;
@@ -340,31 +350,41 @@ class DriverDashboardController {
     }
 
     try {
-      final batch = _firestore.batch();
       final deliveryRef = _firestore.collection('deliveries').doc(delivery.id);
       final driverRef = _firestore.collection('drivers').doc(_uid);
 
-      // Cập nhật trạng thái đơn giao
-      batch.update(deliveryRef, {
-        'status': DeliveryStatus.accepted.toFirestore(),
-        'driverId': _uid,
-        'driverName': user?.fullName ?? driver.id,
-        'driverPhone': user?.phone ?? '',
-        'driverPlate': driver.plateNumber,
-        'acceptedAt': FieldValue.serverTimestamp(),
+      await _firestore.runTransaction((transaction) async {
+        final delSnap = await transaction.get(deliveryRef);
+        if (!delSnap.exists) {
+          throw 'Đơn hàng không còn tồn tại hoặc đã bị hủy!';
+        }
+        final status = delSnap.get('status') as String?;
+        if (status != DeliveryStatus.pendingDriver.toFirestore()) {
+          throw 'Đơn hàng này đã được tài xế khác tiếp nhận!';
+        }
+
+        transaction.update(deliveryRef, {
+          'status': DeliveryStatus.accepted.toFirestore(),
+          'driverId': _uid,
+          'driverName': user?.fullName ?? driver.id,
+          'driverPhone': user?.phone ?? '',
+          'driverPlate': driver.plateNumber,
+          'acceptedAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.update(driverRef, {
+          'isBusy': true,
+          'activeTripId': delivery.id,
+          'lastActiveAt': FieldValue.serverTimestamp(),
+        });
       });
 
-      // Đánh dấu tài xế đang bận
-      batch.update(driverRef, {
-        'isBusy': true,
-        'activeTripId': delivery.id,
-        'lastActiveAt': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
       return true;
     } catch (e) {
-      errorMessage.value = 'Không thể nhận đơn. Vui lòng thử lại.';
+      final msg = e.toString().replaceAll('Exception: ', '');
+      errorMessage.value = msg.contains('tiếp nhận') || msg.contains('hủy')
+          ? msg
+          : 'Không thể nhận đơn. Vui lòng thử lại.';
       return false;
     }
   }

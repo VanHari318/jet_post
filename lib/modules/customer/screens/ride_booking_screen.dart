@@ -111,6 +111,7 @@ class _RideBookingScreenState extends State<RideBookingScreen>
     final uid = FirebaseService.currentUserId;
     if (uid != null) {
       _currentUser = await UserService.instance.getUserProfile(uid);
+      _checkExistingActiveRide(uid);
     }
 
     if (widget.initialPickup != null) {
@@ -126,6 +127,57 @@ class _RideBookingScreenState extends State<RideBookingScreen>
       _dropoffAddress = widget.initialDropoffAddress ?? 'Điểm đến đã chọn';
       _calculateRoute();
     }
+  }
+
+  /// Kiểm tra hàng chờ xe ôm (Quy tắc: Tối đa 1 phần tử)
+  Future<void> _checkExistingActiveRide(String uid) async {
+    final activeRide = await CustomerService.instance.getActiveRide(uid);
+    if (!mounted || activeRide == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: AppColors.primary, size: 24),
+            SizedBox(width: 8),
+            Text('Đang Có Cuốc Xe Ôm',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'Hàng chờ xe ôm hiện đang có 1 cuốc xe đang tìm tài xế hoặc đang diễn ra (Mã: ${activeRide.id.substring(0, 8).toUpperCase()}).\n\nMỗi khách chỉ có thể đặt duy nhất 1 cuốc xe ôm cùng thời điểm. Bạn có muốn xem chuyến đi hiện tại không?',
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context); // Về trang chủ
+            },
+            child: const Text('Về Trang Chủ'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LiveTrackingScreen.ride(rideId: activeRide.id),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Xem Chuyến Đi'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _getCurrentLocation() async {
@@ -411,6 +463,19 @@ class _RideBookingScreenState extends State<RideBookingScreen>
       return;
     }
 
+    // Kiểm tra hàng chờ xe ôm: Chỉ duy nhất 1 phần tử
+    final existingActive = await CustomerService.instance.getActiveRide(user.id);
+    if (!mounted) return;
+    if (existingActive != null) {
+      AppDialogs.showWarning(
+        context,
+        title: 'Hàng Chờ Đã Có Cuốc Xe',
+        message:
+            'Bạn đang có một cuốc xe ôm JetBike trong hàng chờ. Mỗi khách chỉ có thể đặt tối đa 1 cuốc xe ôm cùng thời điểm. Vui lòng hoàn thành hoặc hủy chuyến trước khi đặt chuyến mới!',
+      );
+      return;
+    }
+
     try {
       final rideId = await CustomerService.instance.createRideBooking(
         customerId: user.id,
@@ -434,11 +499,81 @@ class _RideBookingScreenState extends State<RideBookingScreen>
 
       _startRadarCountdown();
       _listenToRideStatus(rideId);
+
+      if (!mounted) return;
+      _showRideQueuedDialog(rideId);
     } catch (e) {
       if (!mounted) return;
       AppDialogs.showError(context,
           title: 'Lỗi Đặt Xe', message: 'Không thể tạo cuốc xe: $e');
     }
+  }
+
+  void _showRideQueuedDialog(String rideId) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 26),
+            SizedBox(width: 8),
+            Text('Đã Vào Hàng Chờ Xe Ôm!',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Cuốc xe JetBike đã được đưa vào hàng chờ tìm tài xế. Hệ thống đang tự động phát tín hiệu cho các tài xế quanh bạn.\n\nBạn có thể ở lại theo dõi hoặc quay về Trang chủ để thực hiện các tác vụ khác mà không cần chờ đợi.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Mã cuốc xe:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  Text(
+                    rideId.substring(0, 8).toUpperCase(),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: AppColors.primary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context); // Về trang chủ
+            },
+            icon: const Icon(Icons.home_rounded, size: 18),
+            label: const Text('Về Trang Chủ'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.radar_rounded, size: 18),
+            label: const Text('Ở Lại Theo Dõi'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _startRadarCountdown() {

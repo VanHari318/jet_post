@@ -61,13 +61,21 @@ class CustomerService {
     return settings.calculateRidePrice(distanceKm);
   }
 
-  /// Tính cước giao hàng Upfront theo khoảng cách km và phụ phí loại hàng
+  /// Tính cước giao hàng Upfront theo cự ly, khối lượng, hàng dễ vỡ và hỏa tốc
   Future<double> calculateDeliveryPrice(
     double distanceKm, {
+    double weightKg = 1.0,
+    bool isFragile = false,
+    bool isExpress = false,
     double packageSurcharge = 0.0,
   }) async {
     final settings = await getSystemSettings();
-    return settings.calculateDeliveryPrice(distanceKm) + packageSurcharge;
+    return settings.calculateDeliveryPrice(
+      distanceKm,
+      weightKg: weightKg,
+      isFragile: isFragile,
+      isExpress: isExpress,
+    ) + packageSurcharge;
   }
 
   // -------------------------------------------------------------
@@ -140,12 +148,18 @@ class CustomerService {
     required String packageType,
     String? packageNote,
     required String pickupAddress,
+    String? pickupDetail,
     required double pickupLat,
     required double pickupLng,
     required String dropoffAddress,
+    String? dropoffDetail,
     required double dropoffLat,
     required double dropoffLng,
     required double distanceKm,
+    double weightKg = 1.0,
+    bool isFragile = false,
+    bool isExpress = false,
+    String payer = 'SENDER',
     required double price,
     double codAmount = 0.0,
     String? routePolyline,
@@ -168,13 +182,19 @@ class CustomerService {
         packageType: packageType,
         packageNote: packageNote,
         pickupAddress: pickupAddress,
+        pickupDetail: pickupDetail,
         pickupLat: pickupLat,
         pickupLng: pickupLng,
         dropoffAddress: dropoffAddress,
+        dropoffDetail: dropoffDetail,
         dropoffLat: dropoffLat,
         dropoffLng: dropoffLng,
         pickupGeohash: pickupGeohash,
         distanceKm: distanceKm,
+        weightKg: weightKg,
+        isFragile: isFragile,
+        isExpress: isExpress,
+        payer: payer,
         price: price,
         codAmount: codAmount,
         paymentMethod: 'CASH',
@@ -320,28 +340,59 @@ class CustomerService {
   // 6. HOẠT ĐỘNG & LỊCH SỬ CHUYẾN ĐI (TASK 1.8)
   // -------------------------------------------------------------
 
-  /// Stream toàn bộ danh sách cuốc xe của khách hàng
+  /// Stream toàn bộ danh sách cuốc xe của khách hàng (sắp xếp giảm dần theo thời gian trong bộ nhớ)
   Stream<List<RideModel>> streamCustomerRides(String customerId) {
+    final uid = customerId.isNotEmpty ? customerId : (FirebaseService.currentUserId ?? '');
+    if (uid.isEmpty) return Stream.value([]);
     return FirebaseService.firestore
         .collection(FirebaseService.colRides)
-        .where('customerId', isEqualTo: customerId)
-        .orderBy('createdAt', descending: true)
+        .where('customerId', isEqualTo: uid)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((d) => RideModel.fromFirestore(d)).toList();
+      final list = snapshot.docs.map((d) => RideModel.fromFirestore(d)).toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 
-  /// Stream toàn bộ danh sách đơn giao hàng của khách gửi
+  /// Stream toàn bộ danh sách đơn giao hàng của khách gửi (sắp xếp giảm dần theo thời gian trong bộ nhớ)
   Stream<List<DeliveryModel>> streamCustomerDeliveries(String senderId) {
+    final uid = senderId.isNotEmpty ? senderId : (FirebaseService.currentUserId ?? '');
+    if (uid.isEmpty) return Stream.value([]);
     return FirebaseService.firestore
         .collection(FirebaseService.colDeliveries)
-        .where('senderId', isEqualTo: senderId)
-        .orderBy('createdAt', descending: true)
+        .where('senderId', isEqualTo: uid)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((d) => DeliveryModel.fromFirestore(d)).toList();
+      final list = snapshot.docs.map((d) => DeliveryModel.fromFirestore(d)).toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
+  }
+
+  /// Kiểm tra cuốc xe ôm đang hoạt động của khách (Hàng chờ xe ôm tối đa 1 phần tử)
+  Future<RideModel?> getActiveRide(String customerId) async {
+    final uid = customerId.isNotEmpty ? customerId : (FirebaseService.currentUserId ?? '');
+    if (uid.isEmpty) return null;
+    try {
+      final snap = await FirebaseService.firestore
+          .collection(FirebaseService.colRides)
+          .where('customerId', isEqualTo: uid)
+          .get();
+      for (final doc in snap.docs) {
+        final ride = RideModel.fromFirestore(doc);
+        if (ride.status == RideStatus.pendingDriver ||
+            ride.status == RideStatus.accepted ||
+            ride.status == RideStatus.arrivedPickup ||
+            ride.status == RideStatus.inProgress) {
+          return ride;
+        }
+      }
+      return null;
+    } catch (e) {
+      AppLogger.error('CustomerService', 'Lỗi kiểm tra cuốc xe active', e);
+      return null;
+    }
   }
 
   // -------------------------------------------------------------
