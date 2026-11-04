@@ -58,6 +58,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
   DeliveryModel? _activeDelivery;
   bool _autoAcceptInProgress = false;
 
+  /// ID của đơn đang được highlight (click từ marker trên map)
+  String? _highlightedOrderId;
+  /// Loại đơn đang highlight: 'ride' hoặc 'delivery'
+  String? _highlightedOrderType; // ignore: unused_field
+
   @override
   void initState() {
     super.initState();
@@ -410,6 +415,31 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
     }
   }
 
+  /// Xử lý khi tài xế bấm vào marker đơn trên bản đồ.
+  /// Lần 1: đơn đó lên đầu + viền xanh lá.
+  /// Lần 2 (cùng đơn): bỏ highlight, về thứ tự cũ.
+  void _onOrderMarkerTap(String orderId, String orderType) {
+    setState(() {
+      if (_highlightedOrderId == orderId) {
+        // Bấm lại cùng đơn → bỏ highlight
+        _highlightedOrderId = null;
+        _highlightedOrderType = null;
+      } else {
+        _highlightedOrderId = orderId;
+        _highlightedOrderType = orderType;
+        // Mở rộng panel dưới để tài xế xem đơn
+        if (_sheetExtent < 0.4) {
+          _sheetController.animateTo(
+            0.4,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    });
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -607,10 +637,14 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
                     ...rides.map(
                       (ride) => Marker(
                         point: LatLng(ride.pickupLat, ride.pickupLng),
-                        width: 38,
-                        height: 38,
-                        child: const _OrderMapMarker(
-                          icon: Icons.motorcycle_rounded,
+                        width: 44,
+                        height: 44,
+                        child: GestureDetector(
+                          onTap: () => _onOrderMarkerTap(ride.id, 'ride'),
+                          child: _OrderMapMarker(
+                            icon: Icons.motorcycle_rounded,
+                            isHighlighted: _highlightedOrderId == ride.id,
+                          ),
                         ),
                       ),
                     ),
@@ -618,10 +652,14 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
                     ...deliveries.map(
                       (delivery) => Marker(
                         point: LatLng(delivery.pickupLat, delivery.pickupLng),
-                        width: 38,
-                        height: 38,
-                        child: const _OrderMapMarker(
-                          icon: Icons.local_shipping_rounded,
+                        width: 44,
+                        height: 44,
+                        child: GestureDetector(
+                          onTap: () => _onOrderMarkerTap(delivery.id, 'delivery'),
+                          child: _OrderMapMarker(
+                            icon: Icons.local_shipping_rounded,
+                            isHighlighted: _highlightedOrderId == delivery.id,
+                          ),
                         ),
                       ),
                     ),
@@ -1058,14 +1096,39 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
               ),
             );
           }
+          // Tạo danh sách kết hợp rides + deliveries
+          // Nếu có đơn highlight, đẩy lên đầu
+          final List<({dynamic order, String type})> allOrders = [
+            ...rides.map((r) => (order: r, type: 'ride')),
+            ...deliveries.map((d) => (order: d, type: 'delivery')),
+          ];
+          if (_highlightedOrderId != null) {
+            final idx = allOrders.indexWhere(
+              (e) => e.type == 'ride'
+                  ? (e.order as RideModel).id == _highlightedOrderId
+                  : (e.order as DeliveryModel).id == _highlightedOrderId,
+            );
+            if (idx > 0) {
+              final highlighted = allOrders.removeAt(idx);
+              allOrders.insert(0, highlighted);
+            }
+          }
           return Column(
             children: [
-              for (var index = 0; index < itemCount; index++) ...[
-                if (index > 0) const SizedBox(height: 8),
-                if (index < rides.length)
-                  _buildRideOrderCard(rides[index])
+              for (var i = 0; i < allOrders.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                if (allOrders[i].type == 'ride')
+                  _buildRideOrderCard(
+                    allOrders[i].order as RideModel,
+                    isHighlighted: _highlightedOrderId ==
+                        (allOrders[i].order as RideModel).id,
+                  )
                 else
-                  _buildDeliveryOrderCard(deliveries[index - rides.length]),
+                  _buildDeliveryOrderCard(
+                    allOrders[i].order as DeliveryModel,
+                    isHighlighted: _highlightedOrderId ==
+                        (allOrders[i].order as DeliveryModel).id,
+                  ),
               ],
             ],
           );
@@ -1074,7 +1137,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
     );
   }
 
-  Widget _buildRideOrderCard(RideModel ride) {
+  Widget _buildRideOrderCard(RideModel ride, {bool isHighlighted = false}) {
     return _OrderCard(
       icon: Icons.motorcycle_rounded,
       label: 'Cuốc xe',
@@ -1082,12 +1145,16 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
       dropoff: ride.dropoffAddress,
       distanceKm: ride.distanceKm,
       price: ride.price,
+      isHighlighted: isHighlighted,
       isAccepting: _isAcceptingOrder,
       onAccept: () => _acceptManualRide(ride),
     );
   }
 
-  Widget _buildDeliveryOrderCard(DeliveryModel delivery) {
+  Widget _buildDeliveryOrderCard(
+    DeliveryModel delivery, {
+    bool isHighlighted = false,
+  }) {
     return _OrderCard(
       icon: Icons.local_shipping_rounded,
       label: 'Giao hàng',
@@ -1096,10 +1163,12 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
       distanceKm: delivery.distanceKm,
       price: delivery.price,
       codAmount: delivery.codAmount,
+      isHighlighted: isHighlighted,
       isAccepting: _isAcceptingOrder,
       onAccept: () => _acceptManualDelivery(delivery),
     );
   }
+
 
   Widget _buildActiveTripPanel() {
     if (_isLoadingActiveTrip) {
@@ -1185,28 +1254,39 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen>
 
 class _OrderMapMarker extends StatelessWidget {
   final IconData icon;
+  final bool isHighlighted;
 
-  const _OrderMapMarker({required this.icon});
+  const _OrderMapMarker({
+    required this.icon,
+    this.isHighlighted = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = isHighlighted ? Colors.green : AppColors.primary;
+    final shadowColor = isHighlighted
+        ? Colors.green.withAlpha(120)
+        : AppColors.primary.withAlpha(70);
+    final size = isHighlighted ? 24.0 : 20.0;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isHighlighted ? Colors.green.shade50 : Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.primary, width: 2),
+        border: Border.all(color: borderColor, width: isHighlighted ? 3 : 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withAlpha(70),
-            blurRadius: 8,
-            spreadRadius: 1,
+            color: shadowColor,
+            blurRadius: isHighlighted ? 14 : 8,
+            spreadRadius: isHighlighted ? 3 : 1,
           ),
         ],
       ),
-      child: Icon(icon, color: AppColors.primary, size: 20),
+      child: Icon(icon, color: borderColor, size: size),
     );
   }
 }
+
+
 
 /// Marker xe máy cho tài xế trên bản đồ
 class _DriverMarker extends StatelessWidget {
@@ -1239,6 +1319,7 @@ class _DriverMarker extends StatelessWidget {
   }
 }
 
+
 class _OrderCard extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1249,6 +1330,7 @@ class _OrderCard extends StatelessWidget {
   final double? codAmount;
   final bool isAccepting;
   final bool isActive;
+  final bool isHighlighted;
   final VoidCallback onAccept;
 
   const _OrderCard({
@@ -1261,18 +1343,35 @@ class _OrderCard extends StatelessWidget {
     this.codAmount,
     this.isAccepting = false,
     this.isActive = false,
+    this.isHighlighted = false,
     required this.onAccept,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: isHighlighted
+            ? Colors.green.shade50
+            : theme.cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(
+          color: isHighlighted ? Colors.green : AppColors.borderLight,
+          width: isHighlighted ? 2.5 : 1,
+        ),
+        boxShadow: isHighlighted
+            ? [
+                BoxShadow(
+                  color: Colors.green.withAlpha(60),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1282,6 +1381,27 @@ class _OrderCard extends StatelessWidget {
               Icon(icon, color: AppColors.primary, size: 18),
               const SizedBox(width: 6),
               Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              if (isHighlighted) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Đã chọn',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
               const Spacer(),
               Text(
                 '${distanceKm.toStringAsFixed(1)} km',
@@ -1349,6 +1469,12 @@ class _OrderCard extends StatelessWidget {
             height: 40,
             child: ElevatedButton(
               onPressed: isAccepting ? null : onAccept,
+              style: isHighlighted
+                  ? ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    )
+                  : null,
               child: isAccepting
                   ? const SizedBox(
                       width: 18,

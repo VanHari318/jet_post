@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../routes/app_routes.dart';
 
@@ -125,12 +125,6 @@ class DriverNavigationDrawer extends StatelessWidget {
               title: 'Thu nhập & lịch sử',
               selected: currentRoute == AppRoutes.driverIncome,
               onTap: () => _openRoute(context, AppRoutes.driverIncome),
-            ),
-            _DrawerItem(
-              icon: Icons.chat_bubble_outline_rounded,
-              title: 'Tin nhắn',
-              selected: currentRoute == AppRoutes.messagesInbox,
-              onTap: () => _openRoute(context, AppRoutes.messagesInbox),
             ),
             _DrawerItem(
               icon: Icons.person_outline_rounded,
