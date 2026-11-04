@@ -88,55 +88,68 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           children: [
             // NHÓM 1: GIAO DIỆN & HIỂN THỊ
-            _buildSectionHeader(context, 'GIAO DIỆN & HIỂN THỊ (THEME)'),
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                ),
+            ExpansionTile(
+              initiallyExpanded: false,
+              leading: const Icon(
+                Icons.palette_outlined,
+                color: AppColors.primary,
               ),
-              child: RadioGroup<String>(
-                groupValue: _themeMode,
-                onChanged: (val) {
-                  if (val != null) _saveThemeMode(val);
-                },
-                child: Column(
-                  children: const [
-                    RadioListTile<String>(
-                      title: Text('Theo hệ điều hành (System)'),
-                      subtitle: Text('Tự động đổi theo cài đặt của máy'),
-                      value: 'system',
-                      secondary: Icon(
-                        Icons.brightness_auto,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    Divider(height: 1),
-                    RadioListTile<String>(
-                      title: Text('Giao diện Sáng (Light Mode)'),
-                      subtitle: Text('Tối ưu nhìn ngoài trời ban ngày'),
-                      value: 'light',
-                      secondary: Icon(
-                        Icons.light_mode,
-                        color: Color(0xFFFFB300),
-                      ),
-                    ),
-                    Divider(height: 1),
-                    RadioListTile<String>(
-                      title: Text('Giao diện Tối (Dark Mode)'),
-                      subtitle: Text('Dịu mắt khi tài xế chạy xe ban đêm'),
-                      value: 'dark',
-                      secondary: Icon(
-                        Icons.dark_mode,
-                        color: Color(0xFF7E57C2),
-                      ),
-                    ),
-                  ],
-                ),
+              title: const Text(
+                'Giao diện & hiển thị',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.surfaceDark : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.borderDark
+                          : AppColors.borderLight,
+                    ),
+                  ),
+                  child: RadioGroup<String>(
+                    groupValue: _themeMode,
+                    onChanged: (val) {
+                      if (val != null) _saveThemeMode(val);
+                    },
+                    child: Column(
+                      children: const [
+                        RadioListTile<String>(
+                          title: Text('Theo hệ điều hành (System)'),
+                          subtitle: Text('Tự động đổi theo cài đặt của máy'),
+                          value: 'system',
+                          secondary: Icon(
+                            Icons.brightness_auto,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        Divider(height: 1),
+                        RadioListTile<String>(
+                          title: Text('Giao diện Sáng (Light Mode)'),
+                          subtitle: Text('Tối ưu nhìn ngoài trời ban ngày'),
+                          value: 'light',
+                          secondary: Icon(
+                            Icons.light_mode,
+                            color: Color(0xFFFFB300),
+                          ),
+                        ),
+                        Divider(height: 1),
+                        RadioListTile<String>(
+                          title: Text('Giao diện Tối (Dark Mode)'),
+                          subtitle: Text('Dịu mắt khi tài xế chạy xe ban đêm'),
+                          value: 'dark',
+                          secondary: Icon(
+                            Icons.dark_mode,
+                            color: Color(0xFF7E57C2),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 24),
@@ -187,9 +200,15 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
 
             const SizedBox(height: 24),
 
-            _buildSectionHeader(context, 'PHƯƠNG THỨC NHẬN ĐƠN'),
-            const SizedBox(height: 10),
-            _buildDriverOrderPreferences(isDark),
+            ExpansionTile(
+              initiallyExpanded: false,
+              leading: const Icon(Icons.tune, color: AppColors.primary),
+              title: const Text(
+                'Phương thức nhận đơn',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              children: [_buildDriverOrderPreferences(isDark)],
+            ),
 
             const SizedBox(height: 24),
 

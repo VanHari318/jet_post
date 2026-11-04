@@ -16,12 +16,12 @@
 Phân hệ User đóng vai trò là **"Cổng vào huyết mạch và Hạ tầng Định danh"** của toàn bộ ứng dụng JetPost. Phân hệ chịu trách nhiệm:
 
 1. **Quản lý Cổng vào (Welcome Gate) & Điều phối Vai trò:** Tiếp nhận người dùng, điều hướng vào đúng 4 phân hệ (Khách hàng, Tài xế, User, Admin) và cung cấp công tắc đổi vai trò nhanh (**Demo Role Switcher**) phục vụ chấm điểm đồ án.
-2. **Xác thực Đa tầng Số điện thoại (Firebase Phone Auth):** Định danh chuẩn E.164 (`+84...`), kiểm duyệt đầu số nhà mạng Việt Nam, gửi và xác thực mã SMS OTP 6 số, bảo vệ chống spam (Rate-limiting 60s) và tích hợp sẵn danh sách Whitelist Testing Numbers để kiểm thử không tốn phí SMS viễn thông.
+2. **Xác thực đa phương thức:** Màn hình đăng nhập cho phép chọn Email/Mật khẩu hoặc SĐT/SMS OTP; đăng ký tài khoản dùng Email OTP.
 3. **Định danh Điện tử eKYC Đối tác Tài xế:** Thu thập thông tin phương tiện, chụp ảnh CCCD 2 mặt và Giấy phép lái xe (GPLX), nạp ảnh lên **Cloudinary** (folder `jetpost/drivers_ekyc`), đẩy hồ sơ vào collection `drivers` ở trạng thái `PENDING_APPROVAL` để Admin thẩm định.
-4. **Hồ sơ Cá nhân & Bảo mật Tài khoản (Profile):** Cập nhật họ tên, ảnh đại diện Avatar qua Cloudinary (`jetpost/avatars`), đổi số điện thoại kèm xác thực OTP.
+4. **Hồ sơ Cá nhân & Bảo mật Tài khoản (Profile):** Cập nhật họ tên, ảnh đại diện Avatar qua Cloudinary (`jetpost/avatars`), thêm/sửa SĐT sau khi xác minh OTP qua Email và hiển thị thâm niên.
 5. **Bộ gác cổng Phân quyền (RBAC Guard) & Tự động Đăng nhập (Auto-login):** Quản lý phiên làm việc trong `SharedPreferences`, tự động mở đúng giao diện, chặn tài xế chưa duyệt bật trực tuyến (`status != ACTIVE`), bảo vệ các màn hình quản trị của Admin.
-6. **Cài đặt Hệ thống (Settings):** Chuyển đổi giao diện Sáng / Tối (Dark/Light mode hỗ trợ tài xế chạy xe ban đêm), cấu hình âm thanh, rung thông báo cuốc xe.
-7. **Trung tâm Nhắn tin Trực tiếp Đa người dùng (Direct P2P User Chat):** Nền tảng chat 1-1 thời gian thực giữa 2 người dùng bất kỳ trên Firestore (Stream `conversations/{chatId}/messages`), hoàn toàn độc lập với cuốc xe.
+6. **Cài đặt Hệ thống (Settings):** Chuyển đổi giao diện, cấu hình âm thanh/rung và phương thức nhận đơn trong các nhóm có thể thu gọn.
+7. **Thông báo & Chat theo phiên đơn:** Tách thông báo Ưu đãi/Đơn hàng theo vai trò, hiển thị số tin chưa đọc và tự thêm tin nhắn trạng thái đơn vào chat P2P.
 
 ### 1.2. Giải pháp Lưu trữ Ảnh & Đa phương tiện (Final Decision)
 
@@ -100,13 +100,15 @@ Phân hệ User đóng vai trò là **"Cổng vào huyết mạch và Hạ tần
 |     STT     | Tên Màn hình                                     | Route Name               | File Mã nguồn                        | Mục đích & Nghiệp vụ                                               |
 | :---------: | :-------------------------------------------------- | :----------------------- | :------------------------------------- | :---------------------------------------------------------------------- |
 | **1** | **Cổng Chào & Điều phối Vai trò**       | `/` (welcomeGate)      | `screens/welcome_gate_screen.dart`   | Cổng vào 4 phân hệ, Demo Switcher, kiểm tra Auto-login             |
-| **2** | **Xác thực Đăng nhập Số Điện thoại** | `/user/phone-auth`     | `screens/phone_auth_screen.dart`     | Nhập SĐT VN, gửi SMS OTP, nhập 6 số OTP xác thực                 |
+| **2** | **Chọn cách Đăng nhập** | `/user/phone-auth` | `screens/login_screen.dart` | Chọn đăng nhập tài khoản hoặc SĐT |
 | **3** | **Đăng ký Đối tác Tài xế (eKYC)**     | `/user/driver-ekyc`    | `screens/driver_ekyc_screen.dart`    | Nhập xe/biển số, chụp CCCD 2 mặt, chụp GPLX tải Cloudinary       |
 | **4** | **Chờ Phê duyệt Hồ sơ Tài xế**         | `/user/kyc-pending`    | `screens/kyc_pending_screen.dart`    | Thông báo hồ sơ đang xét duyệt, chờ Admin duyệt ở Task 4.3    |
 | **5** | **Quản lý Hồ sơ Cá nhân**               | `/user/profile`        | `screens/user_profile_screen.dart`   | Xem/sửa Họ tên, đổi Avatar Cloudinary, đổi SĐT, Đăng xuất    |
 | **6** | **Cài đặt Ứng dụng & Trải nghiệm**     | `/user/settings`       | `screens/app_settings_screen.dart`   | Dark/Light mode, Âm thanh & Rung, Demo Role Switcher                   |
 | **7** | **Hộp thư Hội thoại P2P (Inbox)**         | `/user/messages-inbox` | `screens/messages_inbox_screen.dart` | Danh sách chat gần nhất, tìm kiếm người dùng, badge chưa đọc |
 | **8** | **Phòng Chat Trực tiếp 1-1**               | `/user/direct-chat`    | `screens/direct_chat_screen.dart`    | Chat bong bóng 2 chiều real-time Firestore stream, gửi text          |
+| **9** | **Đăng ký tài khoản** | `/user/register` | `screens/registration_screen.dart` | Đăng ký Email/Mật khẩu và xác minh Email OTP |
+| **10** | **Trung tâm thông báo** | `/user/notifications` | `screens/notifications_screen.dart` | Ưu đãi từ Admin và cập nhật đơn hàng theo vai trò |
 
 ---
 
@@ -475,17 +477,10 @@ Toàn bộ thao tác của người dùng trên giao diện và các luồng d�
         + Máy chủ Worker gọi **Brevo Transactional REST API** (miễn phí 300 emails/ngày) gửi email HTML chuẩn JetPost (`#00A86B`) chứa duy nhất mã OTP 6 số (0 đường link) đến hộp thư người dùng.
       - *Xác thực 100% In-App:* Người dùng nhập 6 số trên widget `OtpPinInput` ngay trong ứng dụng di động, không bao giờ phải chuyển sang trình duyệt web ngoài.
     * **Kịch bản Nghiệp vụ Hoàn chỉnh:**
-      1. **Đăng ký linh hoạt (Dual Registration):** Người dùng có thể đăng ký bằng Số điện thoại (SMS OTP) HOẶC Email & Mật khẩu. Sau khi đăng ký, có thể vào Profile để liên kết thêm phương thức còn lại.
-         - Từ SĐT ➔ Liên kết Email: Nhập Email + Mật khẩu mới ➔ Cloudflare Worker sinh và gửi OTP 6 số vào Email ➔ Nhập OTP trên app để xác thực chính chủ ➔ Hoàn tất liên kết.
-         - Từ Email/MK ➔ Liên kết SĐT: Nhập SĐT mới ➔ Firebase gửi SMS OTP để xác thực SIM chính chủ ➔ Hoàn tất liên kết.
-      2. **Đăng nhập đa kênh (Dual Login):** Giao diện `PhoneAuthScreen` chuyển đổi thành giao diện Đăng nhập Kép với 2 Tab trực quan: "Số Điện Thoại" (nhập SĐT nhận OTP 6 số) và "Email & Mật Khẩu" (đăng nhập tức thì kèm các Chip tài khoản mẫu `khachhang@jetpost.vn`, `taixe@jetpost.vn`, `admin@jetpost.vn`).
+      1. **Đăng ký:** Nhập họ tên, Email và mật khẩu, xác minh OTP gửi đến Email rồi hoàn tất tạo tài khoản.
+      2. **Đăng nhập đa kênh:** Màn hình `LoginScreen` có hai lựa chọn. Đăng nhập tài khoản dùng Email/Mật khẩu; đăng nhập SĐT giữ luồng Firebase SMS OTP cũ.
       3. **Quên mật khẩu đa kênh (Forgot Password):** Cho phép nhận mã OTP đặt lại mật khẩu qua Email HOẶC qua Số điện thoại đã liên kết.
-      4. **Xác thực Bước nhảy khi Đổi SĐT / Mất SIM (Step-up Account Recovery):**
-         - Khi đổi SĐT trong Profile: Hệ thống cung cấp 2 tùy chọn xác minh danh tính bước 1:
-           + *Cách 1 (Vẫn còn SIM cũ):* Gửi OTP về SĐT cũ.
-           + *Cách 2 (Mất SIM / Mất máy):* Đăng nhập bằng Email/Mật khẩu ➔ Chọn "Gửi mã OTP xác nhận về Email liên kết".
-         - Sau khi vượt qua bước 1 ➔ Người dùng nhập SĐT mới ➔ Gửi OTP về SĐT mới ➔ Xác thực hoàn tất cập nhật số.
-         - *Trường hợp mất SIM mà chưa liên kết Email:* Hệ thống bảo lưu chính sách bảo mật buộc liên hệ Quản trị viên (Admin) đối soát eKYC hoặc làm lại SIM tại nhà mạng.
+      4. **Thêm/sửa SĐT trong hồ sơ:** Xác minh danh tính bằng OTP Email, kiểm tra SĐT chưa thuộc tài khoản khác rồi lưu trực tiếp; không gửi OTP SMS để tránh yêu cầu Firebase Blaze.
     * **Tác động Kéo theo trên Toàn hệ thống (Impacts Analysis):**
       - *Database Firestore (`users`):* Bổ sung trường `email` (String, Nullable), `authProviders` (`['phone', 'email']`), `isEmailVerified` (bool).
       - *Phân hệ 1 (Customer):* Khách hàng có thể đăng ký bằng Email; khi đặt xe/hàng nếu chưa có SĐT app sẽ nhắc bổ sung SĐT để tài xế liên hệ đón/giao.

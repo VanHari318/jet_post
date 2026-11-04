@@ -9,6 +9,9 @@ import '../../../models/ride_model.dart';
 import '../../../models/user_model.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/utils/geohash_util.dart';
+import '../../../core/utils/app_logger.dart';
+import '../../user/services/user_service.dart';
+import '../../user/services/notification_service.dart';
 
 /// Controller chính của màn hình chờ đơn tài xế (Driver Dashboard)
 /// Quản lý: trạng thái online/offline, lắng nghe đơn mới, nhận cuốc/đơn
@@ -223,6 +226,7 @@ class DriverDashboardController {
       if (requestId == _availableOrdersRequestId) {
         availableRides.value = rides;
         availableDeliveries.value = deliveries;
+        await _notifyAvailableOrders(rides, deliveries);
       }
     } catch (e) {
       if (requestId == _availableOrdersRequestId) {
@@ -231,6 +235,45 @@ class DriverDashboardController {
     } finally {
       if (requestId == _availableOrdersRequestId) {
         isSearchingOrders.value = false;
+      }
+    }
+  }
+
+  Future<void> _notifyAvailableOrders(
+    List<RideModel> rides,
+    List<DeliveryModel> deliveries,
+  ) async {
+    if (_uid.isEmpty) return;
+    for (final ride in rides) {
+      try {
+        await NotificationService.instance.createNewOrderNotification(
+          driverUid: _uid,
+          orderId: ride.id,
+          orderType: 'ride',
+        );
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'DriverDashboardController',
+          'Không thể tạo thông báo đơn xe mới ${ride.id}',
+          error,
+          stackTrace,
+        );
+      }
+    }
+    for (final delivery in deliveries) {
+      try {
+        await NotificationService.instance.createNewOrderNotification(
+          driverUid: _uid,
+          orderId: delivery.id,
+          orderType: 'delivery',
+        );
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'DriverDashboardController',
+          'Không thể tạo thông báo đơn giao hàng mới ${delivery.id}',
+          error,
+          stackTrace,
+        );
       }
     }
   }
@@ -325,6 +368,14 @@ class DriverDashboardController {
         });
       });
 
+      await _notifyOrderAccepted(
+        recipientUid: ride.customerId,
+        recipientName: ride.customerName,
+        orderId: ride.id,
+        orderType: 'ride',
+        body:
+            'Tài xế đã nhận cuốc của bạn. Vui lòng kiểm tra chi tiết chuyến đi.',
+      );
       return true;
     } catch (e) {
       final msg = e.toString().replaceAll('Exception: ', '');
@@ -379,6 +430,13 @@ class DriverDashboardController {
         });
       });
 
+      await _notifyOrderAccepted(
+        recipientUid: delivery.senderId,
+        recipientName: delivery.senderName,
+        orderId: delivery.id,
+        orderType: 'delivery',
+        body: 'Tài xế đã nhận đơn giao hàng của bạn.',
+      );
       return true;
     } catch (e) {
       final msg = e.toString().replaceAll('Exception: ', '');
@@ -386,6 +444,32 @@ class DriverDashboardController {
           ? msg
           : 'Không thể nhận đơn. Vui lòng thử lại.';
       return false;
+    }
+  }
+
+  Future<void> _notifyOrderAccepted({
+    required String recipientUid,
+    required String recipientName,
+    required String orderId,
+    required String orderType,
+    required String body,
+  }) async {
+    try {
+      await UserService.instance.sendOrderStatusUpdate(
+        recipientUid: recipientUid,
+        recipientName: recipientName,
+        orderId: orderId,
+        orderType: orderType,
+        title: 'Tài xế đã nhận đơn',
+        body: body,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'DriverDashboardController',
+        'Không gửi được thông báo/chat nhận đơn $orderId',
+        error,
+        stackTrace,
+      );
     }
   }
 

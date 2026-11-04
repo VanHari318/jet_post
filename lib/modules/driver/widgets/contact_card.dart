@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/app_dialogs.dart';
 import '../../../routes/app_routes.dart';
+import '../../user/widgets/order_chat_button.dart';
 
 /// Card hiển thị thông tin liên lạc
 /// - Xe Ôm: 1 liên lạc (khách hàng)
@@ -34,12 +35,12 @@ class ContactCard extends StatelessWidget {
     this.customerId,
     required this.customerName,
     required this.customerPhone,
-  })  : isDelivery = false,
-        senderId = null,
-        senderName = null,
-        senderPhone = null,
-        receiverName = null,
-        receiverPhone = null;
+  }) : isDelivery = false,
+       senderId = null,
+       senderName = null,
+       senderPhone = null,
+       receiverName = null,
+       receiverPhone = null;
 
   const ContactCard.delivery({
     super.key,
@@ -49,10 +50,10 @@ class ContactCard extends StatelessWidget {
     required this.senderPhone,
     required this.receiverName,
     required this.receiverPhone,
-  })  : isDelivery = true,
-        customerId = null,
-        customerName = null,
-        customerPhone = null;
+  }) : isDelivery = true,
+       customerId = null,
+       customerName = null,
+       customerPhone = null;
 
   @override
   Widget build(BuildContext context) {
@@ -72,16 +73,16 @@ class ContactCard extends StatelessWidget {
                     color: AppColors.accentLight,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.contact_phone_rounded,
-                      color: AppColors.accent, size: 20),
+                  child: const Icon(
+                    Icons.contact_phone_rounded,
+                    color: AppColors.accent,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 const Text(
                   'Thông Tin Liên Lạc',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                 ),
               ],
             ),
@@ -214,8 +215,9 @@ class _ContactRow extends StatelessWidget {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: const Text('Chưa Có Tài Khoản'),
             content: Text(
               '$name hiện chưa đăng ký tài khoản JetPost trên ứng dụng.\nBạn có thể liên hệ trực tiếp bằng cuộc gọi.',
@@ -325,6 +327,14 @@ class _ContactRow extends StatelessWidget {
             color: Theme.of(context).colorScheme.onSurface.withAlpha(120),
             onPressed: () => _copyPhone(context),
           ),
+        ],
+        if (targetUserId != null && targetUserId!.isNotEmpty)
+          OrderChatButton(
+            targetUserId: targetUserId!,
+            targetName: name,
+            targetPhone: phone,
+          )
+        else if (phone.isNotEmpty)
           IconButton.filledTonal(
             onPressed: () => _openChat(context),
             tooltip: 'Nhắn tin P2P',
@@ -335,6 +345,7 @@ class _ContactRow extends StatelessWidget {
             ),
             icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
           ),
+        if (phone.isNotEmpty) ...[
           const SizedBox(width: 4),
           ElevatedButton.icon(
             onPressed: () => _callPhone(context),

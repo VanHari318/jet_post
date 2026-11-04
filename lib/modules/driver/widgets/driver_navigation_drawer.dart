@@ -127,6 +127,12 @@ class DriverNavigationDrawer extends StatelessWidget {
               onTap: () => _openRoute(context, AppRoutes.driverIncome),
             ),
             _DrawerItem(
+              icon: Icons.notifications_none,
+              title: 'Thông báo',
+              selected: currentRoute == AppRoutes.notifications,
+              onTap: () => _openRoute(context, AppRoutes.notifications),
+            ),
+            _DrawerItem(
               icon: Icons.person_outline_rounded,
               title: 'Hồ sơ cá nhân',
               selected: currentRoute == AppRoutes.userProfile,

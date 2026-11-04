@@ -18,12 +18,16 @@ import '../widgets/phone_input_field.dart';
 /// 2. Tab 2: Xác thực qua Email & Mật khẩu (Firebase Auth + Cloudflare Worker Server-Side OTP)
 /// 3. Quên mật khẩu in-app qua Email OTP 6 số (0 đường link)
 /// 4. Kiểm duyệt dữ liệu toàn diện (Validation) bằng AppValidators
+enum AuthFlow { combined, phoneLogin, emailLogin, register }
+
 class PhoneAuthScreen extends StatefulWidget {
   final UserRole targetRole;
+  final AuthFlow flow;
 
   const PhoneAuthScreen({
     super.key,
     this.targetRole = UserRole.customer,
+    this.flow = AuthFlow.combined,
   });
 
   @override
@@ -58,7 +62,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
   final _emailFormKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final TextEditingController _fullNameController = TextEditingController();
 
   bool _isRegisterMode = false;
@@ -78,7 +83,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _isRegisterMode = widget.flow == AuthFlow.register;
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex:
+          widget.flow == AuthFlow.emailLogin || widget.flow == AuthFlow.register
+          ? 1
+          : 0,
+    );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() {});
@@ -138,7 +151,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
       return;
     }
 
-    if (_lastSentPhone == rawPhone && _verificationId.isNotEmpty && !_canResend) {
+    if (_lastSentPhone == rawPhone &&
+        _verificationId.isNotEmpty &&
+        !_canResend) {
       setState(() {
         _isPhoneCodeSent = true;
         _isPhoneLoading = false;
@@ -218,7 +233,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _isPhoneLoading = false);
-      _showErrorDialog('Mã OTP không chính xác hoặc đã hết hạn. Vui lòng thử lại!');
+      _showErrorDialog(
+        'Mã OTP không chính xác hoặc đã hết hạn. Vui lòng thử lại!',
+      );
     }
   }
 
@@ -274,19 +291,24 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
     if (!_emailFormKey.currentState!.validate()) return;
 
     final email = _emailController.text.trim();
-    AppLogger.userAction('EmailAuth', 'Bấm Nhận OTP Đăng Ký Email', {'email': email});
+    AppLogger.userAction('EmailAuth', 'Bấm Nhận OTP Đăng Ký Email', {
+      'email': email,
+    });
     setState(() => _isEmailLoading = true);
 
     // Pre-flight check: Kiểm tra email đã được đăng ký trước đó hay chưa
     try {
-      final isTaken = await UserService.instance.isEmailAlreadyRegistered(email);
+      final isTaken = await UserService.instance.isEmailAlreadyRegistered(
+        email,
+      );
       if (isTaken) {
         if (!mounted) return;
         setState(() => _isEmailLoading = false);
         await AppDialogs.showError(
           context,
           title: 'Email đã tồn tại',
-          message: 'Địa chỉ email ($email) đã được đăng ký cho một tài khoản khác trong hệ thống.\n\nVui lòng chuyển sang tab Đăng Nhập hoặc sử dụng email khác.',
+          message:
+              'Địa chỉ email ($email) đã được đăng ký cho một tài khoản khác trong hệ thống.\n\nVui lòng chuyển sang tab Đăng Nhập hoặc sử dụng email khác.',
         );
         return;
       }
@@ -370,7 +392,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
           _emailController.text = email;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Đặt lại mật khẩu thành công! Vui lòng đăng nhập với mật khẩu mới.'),
+              content: Text(
+                'Đặt lại mật khẩu thành công! Vui lòng đăng nhập với mật khẩu mới.',
+              ),
               backgroundColor: AppColors.success,
             ),
           );
@@ -400,12 +424,25 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
       final driver = await UserService.instance.getDriverProfile(user.id);
       if (!mounted) return;
 
-      if (driver == null || driver.status == DriverApprovalStatus.pendingApproval) {
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.kycPending, (route) => false);
+      if (driver == null ||
+          driver.status == DriverApprovalStatus.pendingApproval) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.kycPending,
+          (route) => false,
+        );
       } else if (driver.status == DriverApprovalStatus.active) {
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.driverDashboard, (route) => false);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.driverDashboard,
+          (route) => false,
+        );
       } else {
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.welcomeGate, (route) => false);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.welcomeGate,
+          (route) => false,
+        );
       }
     } else if (user.role == UserRole.admin) {
       Navigator.pushNamedAndRemoveUntil(
@@ -418,30 +455,42 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
       if (widget.targetRole == UserRole.driver) {
         final driver = await UserService.instance.getDriverProfile(user.id);
         if (!mounted) return;
-        if (driver != null && driver.status == DriverApprovalStatus.pendingApproval) {
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.kycPending, (route) => false);
+        if (driver != null &&
+            driver.status == DriverApprovalStatus.pendingApproval) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.kycPending,
+            (route) => false,
+          );
           return;
         }
       }
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.welcomeGate, (route) => false);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.welcomeGate,
+        (route) => false,
+      );
     }
   }
 
   void _showErrorDialog(String message) {
-    AppDialogs.showError(
-      context,
-      title: 'Thông báo',
-      message: message,
-    );
+    AppDialogs.showError(context, title: 'Thông báo', message: message);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCombinedFlow = widget.flow == AuthFlow.combined;
+    final isPhoneFlow = widget.flow == AuthFlow.phoneLogin;
+    final title = isPhoneFlow
+        ? 'Đăng nhập bằng SĐT'
+        : widget.flow == AuthFlow.register
+        ? 'Đăng ký tài khoản'
+        : 'Đăng nhập tài khoản';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Xác Thực Tài Khoản'),
+        title: Text(title),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () {
@@ -454,55 +503,69 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
             }
           },
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-          tabs: const [
-            Tab(icon: Icon(Icons.phone_iphone), text: 'Số Điện Thoại'),
-            Tab(icon: Icon(Icons.email_outlined), text: 'Email & Mật Khẩu'),
-          ],
-        ),
+        bottom: isCombinedFlow
+            ? TabBar(
+                controller: _tabController,
+                indicatorColor: AppColors.primary,
+                indicatorWeight: 3,
+                labelColor: AppColors.primary,
+                unselectedLabelColor: isDark
+                    ? AppColors.textMutedDark
+                    : AppColors.textMutedLight,
+                tabs: const [
+                  Tab(icon: Icon(Icons.phone_iphone), text: 'Số Điện Thoại'),
+                  Tab(
+                    icon: Icon(Icons.email_outlined),
+                    text: 'Email & Mật Khẩu',
+                  ),
+                ],
+              )
+            : null,
       ),
       body: SafeArea(
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            // ==========================================
-            // TAB 1: SỐ ĐIỆN THOẠI (SMS OTP)
-            // ==========================================
-            SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 20,
-                bottom: MediaQuery.of(context).padding.bottom + 24,
+        child: isCombinedFlow
+            ? TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildScrollableAuthContent(
+                    isDark,
+                    _isPhoneCodeSent
+                        ? _buildPhoneOtpPhase(isDark)
+                        : _buildPhoneInputPhase(isDark),
+                  ),
+                  _buildScrollableAuthContent(
+                    isDark,
+                    _isEmailOtpPhase
+                        ? _buildEmailOtpPhase(isDark)
+                        : _buildEmailAuthPhase(isDark),
+                  ),
+                ],
+              )
+            : _buildScrollableAuthContent(
+                isDark,
+                isPhoneFlow
+                    ? (_isPhoneCodeSent
+                          ? _buildPhoneOtpPhase(isDark)
+                          : _buildPhoneInputPhase(isDark))
+                    : (_isEmailOtpPhase
+                          ? _buildEmailOtpPhase(isDark)
+                          : _buildEmailAuthPhase(isDark)),
               ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: _isPhoneCodeSent ? _buildPhoneOtpPhase(isDark) : _buildPhoneInputPhase(isDark),
-              ),
-            ),
+      ),
+    );
+  }
 
-            // ==========================================
-            // TAB 2: EMAIL & MẬT KHẨU
-            // ==========================================
-            SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 20,
-                bottom: MediaQuery.of(context).padding.bottom + 24,
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: _isEmailOtpPhase ? _buildEmailOtpPhase(isDark) : _buildEmailAuthPhase(isDark),
-              ),
-            ),
-          ],
-        ),
+  Widget _buildScrollableAuthContent(bool isDark, Widget child) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 20,
+        bottom: MediaQuery.of(context).padding.bottom + 24,
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: child,
       ),
     );
   }
@@ -524,7 +587,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
               color: AppColors.primary.withAlpha(25),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.phone_android, size: 38, color: AppColors.primary),
+            child: const Icon(
+              Icons.phone_android,
+              size: 38,
+              color: AppColors.primary,
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -538,7 +605,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
           'Hệ thống sẽ gửi mã SMS OTP gồm 6 chữ số để xác minh số điện thoại chính chủ của bạn.',
           style: TextStyle(
             fontSize: 13.5,
-            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
           ),
           textAlign: TextAlign.center,
         ),
@@ -560,7 +629,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Tiếp Tục Nhận Mã OTP'),
         ),
@@ -581,7 +653,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
               color: AppColors.success.withAlpha(25),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.sms_outlined, size: 38, color: AppColors.success),
+            child: const Icon(
+              Icons.sms_outlined,
+              size: 38,
+              color: AppColors.success,
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -598,7 +674,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
               'Đã gửi tới ${_phoneController.text.trim()} ',
               style: TextStyle(
                 fontSize: 13.5,
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
               ),
             ),
             InkWell(
@@ -626,26 +704,37 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
           child: _canResend
               ? TextButton.icon(
                   onPressed: _handleSendPhoneOtp,
-                  icon: const Icon(Icons.refresh, size: 18, color: AppColors.primary),
+                  icon: const Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
                   label: const Text('Gửi lại mã OTP SMS'),
                 )
               : Text(
                   'Gửi lại mã sau 00:${_secondsRemaining.toString().padLeft(2, '0')}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                    color: isDark
+                        ? AppColors.textMutedDark
+                        : AppColors.textMutedLight,
                   ),
                 ),
         ),
         const SizedBox(height: 24),
 
         ElevatedButton(
-          onPressed: _isPhoneLoading ? null : () => _handleVerifyPhoneOtp(_phoneOtpController.text),
+          onPressed: _isPhoneLoading
+              ? null
+              : () => _handleVerifyPhoneOtp(_phoneOtpController.text),
           child: _isPhoneLoading
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Xác Nhận & Đăng Nhập'),
         ),
@@ -664,87 +753,95 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
         key: const ValueKey('email_form_phase'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Segmented Button Chuyển Đổi: Đăng Nhập vs Đăng Ký
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : const Color(0xFFF0F2F5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _isRegisterMode = false),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: !_isRegisterMode
-                            ? (isDark ? AppColors.cardDark : Colors.white)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: !_isRegisterMode
-                            ? [
-                                BoxShadow(
-                                  color: Colors.black.withAlpha(15),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Đăng Nhập',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: !_isRegisterMode ? AppColors.primary : Colors.grey,
+          if (widget.flow == AuthFlow.combined) ...[
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : const Color(0xFFF0F2F5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _isRegisterMode = false),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: !_isRegisterMode
+                              ? (isDark ? AppColors.cardDark : Colors.white)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: !_isRegisterMode
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withAlpha(15),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Đăng Nhập',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: !_isRegisterMode
+                                ? AppColors.primary
+                                : Colors.grey,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _isRegisterMode = true),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _isRegisterMode
-                            ? (isDark ? AppColors.cardDark : Colors.white)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: _isRegisterMode
-                            ? [
-                                BoxShadow(
-                                  color: Colors.black.withAlpha(15),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Đăng Ký Mới',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _isRegisterMode ? AppColors.primary : Colors.grey,
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _isRegisterMode = true),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _isRegisterMode
+                              ? (isDark ? AppColors.cardDark : Colors.white)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: _isRegisterMode
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withAlpha(15),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Đăng Ký Mới',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _isRegisterMode
+                                ? AppColors.primary
+                                : Colors.grey,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
+          ],
 
           // Trường Họ và Tên (chỉ hiện khi Đăng ký)
           if (_isRegisterMode) ...[
-            const Text('Họ và tên đầy đủ', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text(
+              'Họ và tên đầy đủ',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
             TextFormField(
               controller: _fullNameController,
@@ -752,15 +849,23 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
               autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: InputDecoration(
                 hintText: 'Ví dụ: Nguyễn Văn A',
-                prefixIcon: const Icon(Icons.person_outline, color: AppColors.primary),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(
+                  Icons.person_outline,
+                  color: AppColors.primary,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
           ],
 
           // Trường Email
-          const Text('Địa chỉ Email', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Địa chỉ Email',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 6),
           TextFormField(
             controller: _emailController,
@@ -769,8 +874,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
             autovalidateMode: AutovalidateMode.onUserInteraction,
             decoration: InputDecoration(
               hintText: 'Ví dụ: nguoidung@jetpost.vn',
-              prefixIcon: const Icon(Icons.email_outlined, color: AppColors.primary),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              prefixIcon: const Icon(
+                Icons.email_outlined,
+                color: AppColors.primary,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -785,39 +895,61 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
             autovalidateMode: AutovalidateMode.onUserInteraction,
             decoration: InputDecoration(
               hintText: 'Tối thiểu 6 ký tự',
-              prefixIcon: const Icon(Icons.lock_outline, color: AppColors.primary),
+              prefixIcon: const Icon(
+                Icons.lock_outline,
+                color: AppColors.primary,
+              ),
               suffixIcon: IconButton(
                 icon: Icon(
                   _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
                   color: Colors.grey,
                 ),
-                onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                onPressed: () =>
+                    setState(() => _isPasswordVisible = !_isPasswordVisible),
               ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
 
           // Trường Xác nhận Mật khẩu (chỉ hiện khi Đăng ký)
           if (_isRegisterMode) ...[
-            const Text('Xác nhận mật khẩu', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text(
+              'Xác nhận mật khẩu',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
             TextFormField(
               controller: _confirmPasswordController,
               obscureText: !_isConfirmPasswordVisible,
-              validator: (val) => AppValidators.validateConfirmPassword(val, _passwordController.text),
+              validator: (val) => AppValidators.validateConfirmPassword(
+                val,
+                _passwordController.text,
+              ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: InputDecoration(
                 hintText: 'Nhập lại mật khẩu ở trên',
-                prefixIcon: const Icon(Icons.lock_clock_outlined, color: AppColors.primary),
+                prefixIcon: const Icon(
+                  Icons.lock_clock_outlined,
+                  color: AppColors.primary,
+                ),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                    _isConfirmPasswordVisible
+                        ? Icons.visibility
+                        : Icons.visibility_off,
                     color: Colors.grey,
                   ),
-                  onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
+                  onPressed: () => setState(
+                    () =>
+                        _isConfirmPasswordVisible = !_isConfirmPasswordVisible,
+                  ),
                 ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -837,15 +969,39 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
           ElevatedButton(
             onPressed: _isEmailLoading
                 ? null
-                : (_isRegisterMode ? _handleStartEmailRegistration : _handleEmailLogin),
+                : (_isRegisterMode
+                      ? _handleStartEmailRegistration
+                      : _handleEmailLogin),
             child: _isEmailLoading
                 ? const SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
                   )
-                : Text(_isRegisterMode ? 'Tiếp Tục & Nhận OTP Email' : 'Đăng Nhập Ngay'),
+                : Text(
+                    _isRegisterMode
+                        ? 'Tiếp Tục & Nhận OTP Email'
+                        : 'Đăng Nhập Ngay',
+                  ),
           ),
+
+          if (widget.flow == AuthFlow.emailLogin) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Bạn chưa có tài khoản?'),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.register),
+                  child: const Text('Đăng ký'),
+                ),
+              ],
+            ),
+          ],
 
           if (!_isRegisterMode) ...[
             const SizedBox(height: 24),
@@ -870,7 +1026,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
               color: AppColors.primary.withAlpha(25),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.mark_email_read_outlined, size: 38, color: AppColors.primary),
+            child: const Icon(
+              Icons.mark_email_read_outlined,
+              size: 38,
+              color: AppColors.primary,
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -888,7 +1048,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
                 'Mã OTP 6 số đã gửi tới ${_emailController.text.trim()} ',
                 style: TextStyle(
                   fontSize: 13.5,
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -918,14 +1080,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
           child: _canResendEmailOtp
               ? TextButton.icon(
                   onPressed: _handleStartEmailRegistration,
-                  icon: const Icon(Icons.refresh, size: 18, color: AppColors.primary),
+                  icon: const Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
                   label: const Text('Gửi lại mã OTP qua Email'),
                 )
               : Text(
                   'Gửi lại mã sau 00:${_emailSecondsRemaining.toString().padLeft(2, '0')}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                    color: isDark
+                        ? AppColors.textMutedDark
+                        : AppColors.textMutedLight,
                   ),
                 ),
         ),
@@ -934,12 +1102,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
         ElevatedButton(
           onPressed: _isEmailLoading
               ? null
-              : () => _handleVerifyEmailRegistrationOtp(_emailOtpController.text),
+              : () =>
+                    _handleVerifyEmailRegistrationOtp(_emailOtpController.text),
           child: _isEmailLoading
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Hoàn Tất Đăng Ký'),
         ),
@@ -957,21 +1129,29 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : const Color(0xFFF8F9FA),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.science_outlined, size: 16, color: AppColors.primary),
+              const Icon(
+                Icons.science_outlined,
+                size: 16,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Số điện thoại mẫu kiểm thử (OTP cố định: 123456)',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
                 ),
               ),
             ],
@@ -994,7 +1174,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
 
   Widget _buildPhoneChip(String phone, String label) {
     return ActionChip(
-      avatar: const Icon(Icons.phone_iphone, size: 14, color: AppColors.primary),
+      avatar: const Icon(
+        Icons.phone_iphone,
+        size: 14,
+        color: AppColors.primary,
+      ),
       label: Text('$label ($phone)', style: const TextStyle(fontSize: 11)),
       onPressed: () {
         setState(() {
@@ -1011,21 +1195,29 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : const Color(0xFFF8F9FA),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.touch_app_outlined, size: 16, color: AppColors.primary),
+              const Icon(
+                Icons.touch_app_outlined,
+                size: 16,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 6),
               Text(
                 '1 Chạm điền tài khoản mẫu (Mật khẩu: 123456)',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
                 ),
               ),
             ],
@@ -1036,8 +1228,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
             runSpacing: 6,
             children: [
               ActionChip(
-                avatar: const Icon(Icons.person, size: 14, color: AppColors.success),
-                label: const Text('khachhang@jetpost.vn', style: TextStyle(fontSize: 11)),
+                avatar: const Icon(
+                  Icons.person,
+                  size: 14,
+                  color: AppColors.success,
+                ),
+                label: const Text(
+                  'khachhang@jetpost.vn',
+                  style: TextStyle(fontSize: 11),
+                ),
                 onPressed: () {
                   setState(() {
                     _emailController.text = 'khachhang@jetpost.vn';
@@ -1046,8 +1245,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
                 },
               ),
               ActionChip(
-                avatar: const Icon(Icons.two_wheeler, size: 14, color: AppColors.secondary),
-                label: const Text('taixe@jetpost.vn', style: TextStyle(fontSize: 11)),
+                avatar: const Icon(
+                  Icons.two_wheeler,
+                  size: 14,
+                  color: AppColors.secondary,
+                ),
+                label: const Text(
+                  'taixe@jetpost.vn',
+                  style: TextStyle(fontSize: 11),
+                ),
                 onPressed: () {
                   setState(() {
                     _emailController.text = 'taixe@jetpost.vn';
@@ -1056,8 +1262,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen>
                 },
               ),
               ActionChip(
-                avatar: const Icon(Icons.admin_panel_settings, size: 14, color: AppColors.primary),
-                label: const Text('admin@jetpost.vn', style: TextStyle(fontSize: 11)),
+                avatar: const Icon(
+                  Icons.admin_panel_settings,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+                label: const Text(
+                  'admin@jetpost.vn',
+                  style: TextStyle(fontSize: 11),
+                ),
                 onPressed: () {
                   setState(() {
                     _emailController.text = 'admin@jetpost.vn';
@@ -1086,10 +1299,12 @@ class _ForgotPasswordBottomSheet extends StatefulWidget {
   });
 
   @override
-  State<_ForgotPasswordBottomSheet> createState() => _ForgotPasswordBottomSheetState();
+  State<_ForgotPasswordBottomSheet> createState() =>
+      _ForgotPasswordBottomSheetState();
 }
 
-class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> {
+class _ForgotPasswordBottomSheetState
+    extends State<_ForgotPasswordBottomSheet> {
   final _emailCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
@@ -1124,7 +1339,10 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
     }
 
     setState(() => _isLoading = true);
-    final res = await UserService.instance.sendEmailOtp(email: email, type: 'RESET_PASSWORD');
+    final res = await UserService.instance.sendEmailOtp(
+      email: email,
+      type: 'RESET_PASSWORD',
+    );
     if (!mounted) return;
     setState(() => _isLoading = false);
 
@@ -1138,7 +1356,8 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
       AppDialogs.showError(
         context,
         title: 'Gửi OTP Thất Bại',
-        message: res['error'] as String? ?? 'Không thể gửi mã xác nhận đến Email.',
+        message:
+            res['error'] as String? ?? 'Không thể gửi mã xác nhận đến Email.',
       );
     }
   }
@@ -1175,13 +1394,24 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
 
     final passErr = AppValidators.validatePassword(newPass);
     if (passErr != null) {
-      AppDialogs.showError(context, title: 'Mật Khẩu Không Đủ Điều Kiện', message: passErr);
+      AppDialogs.showError(
+        context,
+        title: 'Mật Khẩu Không Đủ Điều Kiện',
+        message: passErr,
+      );
       return;
     }
 
-    final confirmErr = AppValidators.validateConfirmPassword(confirmPass, newPass);
+    final confirmErr = AppValidators.validateConfirmPassword(
+      confirmPass,
+      newPass,
+    );
     if (confirmErr != null) {
-      AppDialogs.showError(context, title: 'Mật Khẩu Không Khớp', message: confirmErr);
+      AppDialogs.showError(
+        context,
+        title: 'Mật Khẩu Không Khớp',
+        message: confirmErr,
+      );
       return;
     }
 
@@ -1189,7 +1419,9 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
 
     try {
       // Thực hiện đổi mật khẩu in-app qua Firebase Auth SDK
-      await FirebaseService.auth.sendPasswordResetEmail(email: _emailCtrl.text.trim());
+      await FirebaseService.auth.sendPasswordResetEmail(
+        email: _emailCtrl.text.trim(),
+      );
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -1215,7 +1447,8 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
         left: 24,
         right: 24,
         top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom +
+        bottom:
+            MediaQuery.of(context).viewInsets.bottom +
             MediaQuery.of(context).padding.bottom +
             24,
       ),
@@ -1230,8 +1463,14 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Khôi Phục Mật Khẩu (In-App)', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              const Text(
+                'Khôi Phục Mật Khẩu (In-App)',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -1246,20 +1485,29 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
               decoration: InputDecoration(
                 hintText: 'Email của bạn',
                 prefixIcon: const Icon(Icons.email_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _isLoading ? null : _handleSendResetOtp,
               child: _isLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white),
+                    )
                   : const Text('Gửi Mã Xác Thực OTP'),
             ),
           ] else if (_phase == 1) ...[
             Text('Nhập mã OTP 6 số đã gửi tới ${_emailCtrl.text.trim()}:'),
             const SizedBox(height: 16),
-            OtpPinInput(controller: _otpCtrl, onCompleted: (_) => _handleVerifyResetOtp()),
+            OtpPinInput(
+              controller: _otpCtrl,
+              onCompleted: (_) => _handleVerifyResetOtp(),
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _handleVerifyResetOtp,
@@ -1274,7 +1522,9 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
               decoration: InputDecoration(
                 hintText: 'Mật khẩu mới (tối thiểu 6 ký tự)',
                 prefixIcon: const Icon(Icons.lock_outline),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -1284,14 +1534,20 @@ class _ForgotPasswordBottomSheetState extends State<_ForgotPasswordBottomSheet> 
               decoration: InputDecoration(
                 hintText: 'Xác nhận lại mật khẩu mới',
                 prefixIcon: const Icon(Icons.lock_clock_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _isLoading ? null : _handleSaveNewPassword,
               child: _isLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white),
+                    )
                   : const Text('Lưu Mật Khẩu & Hoàn Tất'),
             ),
           ],

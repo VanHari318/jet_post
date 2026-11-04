@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../models/delivery_model.dart';
 import '../../../models/ride_model.dart';
+import '../../user/services/user_service.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/utils/geohash_util.dart';
 
@@ -59,23 +61,25 @@ class DriverTripController {
 
   /// Lắng nghe realtime document của chuyến đang thực hiện
   void _listenTrip() {
-    final collection =
-        tripType == TripType.ride ? 'rides' : 'deliveries';
+    final collection = tripType == TripType.ride ? 'rides' : 'deliveries';
 
     _tripSub = _firestore
         .collection(collection)
         .doc(tripId)
         .snapshots()
-        .listen((snap) {
-      if (!snap.exists) return;
-      if (tripType == TripType.ride) {
-        currentRide.value = RideModel.fromFirestore(snap);
-      } else {
-        currentDelivery.value = DeliveryModel.fromFirestore(snap);
-      }
-    }, onError: (e) {
-      errorMessage.value = 'Lỗi đồng bộ dữ liệu chuyến đi.';
-    });
+        .listen(
+          (snap) {
+            if (!snap.exists) return;
+            if (tripType == TripType.ride) {
+              currentRide.value = RideModel.fromFirestore(snap);
+            } else {
+              currentDelivery.value = DeliveryModel.fromFirestore(snap);
+            }
+          },
+          onError: (e) {
+            errorMessage.value = 'Lỗi đồng bộ dữ liệu chuyến đi.';
+          },
+        );
   }
 
   // ── Advance Status — Xe Ôm ───────────────────────────────────────────────
@@ -93,9 +97,7 @@ class DriverTripController {
     errorMessage.value = null;
 
     try {
-      final updateData = <String, dynamic>{
-        'status': nextStatus.toFirestore(),
-      };
+      final updateData = <String, dynamic>{'status': nextStatus.toFirestore()};
 
       // Ghi timestamp khi hoàn thành
       if (nextStatus == RideStatus.completed) {
@@ -103,6 +105,14 @@ class DriverTripController {
       }
 
       await _firestore.collection('rides').doc(tripId).update(updateData);
+      await _notifyOrderStatus(
+        recipientUid: ride.customerId,
+        recipientName: ride.customerName,
+        orderId: ride.id,
+        orderType: 'ride',
+        title: _rideStatusTitle(nextStatus),
+        body: _rideStatusMessage(nextStatus),
+      );
 
       // Khi hoàn thành → cập nhật lại trạng thái tài xế
       if (nextStatus == RideStatus.completed) {
@@ -147,9 +157,7 @@ class DriverTripController {
     errorMessage.value = null;
 
     try {
-      final updateData = <String, dynamic>{
-        'status': nextStatus.toFirestore(),
-      };
+      final updateData = <String, dynamic>{'status': nextStatus.toFirestore()};
 
       if (pickupPhotoUrl != null && pickupPhotoUrl.isNotEmpty) {
         updateData['pickupPhotoUrl'] = pickupPhotoUrl;
@@ -161,6 +169,14 @@ class DriverTripController {
       }
 
       await _firestore.collection('deliveries').doc(tripId).update(updateData);
+      await _notifyOrderStatus(
+        recipientUid: delivery.senderId,
+        recipientName: delivery.senderName,
+        orderId: delivery.id,
+        orderType: 'delivery',
+        title: _deliveryStatusTitle(nextStatus),
+        body: _deliveryStatusMessage(nextStatus),
+      );
 
       // Khi hoàn thành → cập nhật lại trạng thái tài xế
       if (nextStatus == DeliveryStatus.completed) {
@@ -173,6 +189,93 @@ class DriverTripController {
       return false;
     } finally {
       isUpdating.value = false;
+    }
+  }
+
+  Future<void> _notifyOrderStatus({
+    required String recipientUid,
+    required String recipientName,
+    required String orderId,
+    required String orderType,
+    required String title,
+    required String body,
+  }) async {
+    try {
+      await UserService.instance.sendOrderStatusUpdate(
+        recipientUid: recipientUid,
+        recipientName: recipientName,
+        orderId: orderId,
+        orderType: orderType,
+        title: title,
+        body: body,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'DriverTripController',
+        'Không gửi được thông báo/chat trạng thái đơn $orderId',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  String _rideStatusTitle(RideStatus status) {
+    switch (status) {
+      case RideStatus.accepted:
+        return 'Tài xế đã nhận đơn';
+      case RideStatus.arrivedPickup:
+        return 'Tài xế đã đến điểm đón';
+      case RideStatus.inProgress:
+        return 'Chuyến đi đang diễn ra';
+      case RideStatus.completed:
+        return 'Chuyến đi đã hoàn thành';
+      default:
+        return 'Cập nhật đơn hàng';
+    }
+  }
+
+  String _rideStatusMessage(RideStatus status) {
+    switch (status) {
+      case RideStatus.accepted:
+        return 'Tài xế đã nhận cuốc của bạn. Vui lòng kiểm tra chi tiết chuyến đi.';
+      case RideStatus.arrivedPickup:
+        return 'Tài xế đã đến điểm đón của bạn.';
+      case RideStatus.inProgress:
+        return 'Chuyến đi của bạn đang được thực hiện.';
+      case RideStatus.completed:
+        return 'Chuyến đi đã hoàn thành. Cảm ơn bạn đã sử dụng JetPost!';
+      default:
+        return 'Trạng thái đơn hàng của bạn đã được cập nhật.';
+    }
+  }
+
+  String _deliveryStatusTitle(DeliveryStatus status) {
+    switch (status) {
+      case DeliveryStatus.accepted:
+        return 'Tài xế đã nhận đơn giao hàng';
+      case DeliveryStatus.pickedUp:
+        return 'Tài xế đã lấy hàng';
+      case DeliveryStatus.inTransit:
+        return 'Đơn hàng đang được giao';
+      case DeliveryStatus.completed:
+        return 'Đơn hàng đã giao thành công';
+      default:
+        return 'Cập nhật đơn hàng';
+    }
+  }
+
+  String _deliveryStatusMessage(DeliveryStatus status) {
+    switch (status) {
+      case DeliveryStatus.accepted:
+        return 'Tài xế đã nhận đơn giao hàng của bạn.';
+      case DeliveryStatus.pickedUp:
+        return 'Tài xế đã đến lấy hàng.';
+      case DeliveryStatus.inTransit:
+        return 'Đơn hàng đang trên đường giao đến người nhận.';
+      case DeliveryStatus.completed:
+        return 'Đơn hàng đã được giao thành công.';
+      default:
+        return 'Trạng thái đơn hàng của bạn đã được cập nhật.';
     }
   }
 
@@ -209,6 +312,14 @@ class DriverTripController {
       }
 
       await _firestore.collection('deliveries').doc(tripId).update(updateData);
+      await _notifyOrderStatus(
+        recipientUid: delivery.senderId,
+        recipientName: delivery.senderName,
+        orderId: delivery.id,
+        orderType: 'delivery',
+        title: _deliveryStatusTitle(DeliveryStatus.completed),
+        body: _deliveryStatusMessage(DeliveryStatus.completed),
+      );
 
       // Giải phóng tài xế sau khi hoàn thành
       await _releaseDriver();
@@ -245,8 +356,7 @@ class DriverTripController {
     errorMessage.value = null;
 
     try {
-      final collection =
-          tripType == TripType.ride ? 'rides' : 'deliveries';
+      final collection = tripType == TripType.ride ? 'rides' : 'deliveries';
 
       final cancelStatus = tripType == TripType.ride
           ? RideStatus.cancelled.toFirestore()
@@ -257,6 +367,32 @@ class DriverTripController {
         'cancelReason': reason,
         'cancelledBy': 'driver',
       });
+
+      if (tripType == TripType.ride) {
+        final ride = currentRide.value;
+        if (ride != null) {
+          await _notifyOrderStatus(
+            recipientUid: ride.customerId,
+            recipientName: ride.customerName,
+            orderId: ride.id,
+            orderType: 'ride',
+            title: 'Đơn hàng đã bị hủy',
+            body: 'Tài xế đã hủy cuốc xe của bạn. Lý do: $reason',
+          );
+        }
+      } else {
+        final delivery = currentDelivery.value;
+        if (delivery != null) {
+          await _notifyOrderStatus(
+            recipientUid: delivery.senderId,
+            recipientName: delivery.senderName,
+            orderId: delivery.id,
+            orderType: 'delivery',
+            title: 'Đơn hàng đã bị hủy',
+            body: 'Tài xế đã hủy đơn giao hàng của bạn. Lý do: $reason',
+          );
+        }
+      }
 
       // Giải phóng tài xế sau khi hủy
       await _releaseDriver();
@@ -379,11 +515,13 @@ class DriverTripController {
   bool get canAdvance {
     if (tripType == TripType.ride) {
       return _nextRideStatus(
-              currentRide.value?.status ?? RideStatus.completed) !=
+            currentRide.value?.status ?? RideStatus.completed,
+          ) !=
           null;
     } else {
       return _nextDeliveryStatus(
-              currentDelivery.value?.status ?? DeliveryStatus.completed) !=
+            currentDelivery.value?.status ?? DeliveryStatus.completed,
+          ) !=
           null;
     }
   }

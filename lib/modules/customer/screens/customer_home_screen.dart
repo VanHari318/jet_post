@@ -98,8 +98,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 color: AppColors.primary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.electric_moped_rounded,
-                  color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.electric_moped_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 8),
             const Text(
@@ -109,6 +112,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none),
+            tooltip: 'Thông báo',
+            onPressed: () =>
+                Navigator.pushNamed(context, AppRoutes.notifications),
+          ),
           // Nút Hộp thư Chat P2P
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
@@ -131,13 +140,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: () {
-                Navigator.pushNamed(context, AppRoutes.userProfile)
-                    .then((_) => _loadUserAndLocation());
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.userProfile,
+                ).then((_) => _loadUserAndLocation());
               },
               child: CircleAvatar(
                 radius: 17,
                 backgroundColor: AppColors.primaryLight,
-                backgroundImage: _currentUser?.avatarUrl != null &&
+                backgroundImage:
+                    _currentUser?.avatarUrl != null &&
                         _currentUser!.avatarUrl!.isNotEmpty
                     ? NetworkImage(
                         CloudinaryService.instance.getOptimizedUrl(
@@ -147,10 +159,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         ),
                       )
                     : null,
-                child: _currentUser?.avatarUrl == null ||
+                child:
+                    _currentUser?.avatarUrl == null ||
                         _currentUser!.avatarUrl!.isEmpty
                     ? Text(
-                        _currentUser != null && _currentUser!.fullName.isNotEmpty
+                        _currentUser != null &&
+                                _currentUser!.fullName.isNotEmpty
                             ? _currentUser!.fullName[0].toUpperCase()
                             : 'K',
                         style: const TextStyle(
@@ -340,7 +354,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: isDark
                                 ? AppColors.cardDark
@@ -354,13 +370,18 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.search,
-                                  color: AppColors.primary, size: 20),
+                              Icon(
+                                Icons.search,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
                               SizedBox(width: 10),
                               Text(
                                 'Bạn muốn đi đâu hôm nay?',
                                 style: TextStyle(
-                                    fontSize: 13, color: Colors.grey),
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -385,8 +406,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 // DANH MỤC 2 DỊCH VỤ CỐT LÕI
                 Row(
                   children: [
-                    const Icon(Icons.dashboard_customize_outlined,
-                        size: 18, color: AppColors.primary),
+                    const Icon(
+                      Icons.dashboard_customize_outlined,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'DỊCH VỤ CỐT LÕI',
@@ -456,19 +480,23 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           stream: CustomerService.instance.streamCustomerDeliveries(customerId),
           builder: (context, deliverySnap) {
             final activeRides = (rideSnap.data ?? [])
-                .where((r) =>
-                    r.status == RideStatus.pendingDriver ||
-                    r.status == RideStatus.accepted ||
-                    r.status == RideStatus.arrivedPickup ||
-                    r.status == RideStatus.inProgress)
+                .where(
+                  (r) =>
+                      r.status == RideStatus.pendingDriver ||
+                      r.status == RideStatus.accepted ||
+                      r.status == RideStatus.arrivedPickup ||
+                      r.status == RideStatus.inProgress,
+                )
                 .toList();
 
             final activeDeliveries = (deliverySnap.data ?? [])
-                .where((d) =>
-                    d.status == DeliveryStatus.pendingDriver ||
-                    d.status == DeliveryStatus.accepted ||
-                    d.status == DeliveryStatus.pickedUp ||
-                    d.status == DeliveryStatus.inTransit)
+                .where(
+                  (d) =>
+                      d.status == DeliveryStatus.pendingDriver ||
+                      d.status == DeliveryStatus.accepted ||
+                      d.status == DeliveryStatus.pickedUp ||
+                      d.status == DeliveryStatus.inTransit,
+                )
                 .toList();
 
             if (activeRides.isEmpty && activeDeliveries.isEmpty) {
@@ -489,7 +517,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => LiveTrackingScreen.ride(rideId: ride.id),
+                          builder: (_) =>
+                              LiveTrackingScreen.ride(rideId: ride.id),
                         ),
                       );
                     },
@@ -499,8 +528,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: isSearching
-                              ? [const Color(0xFF007A4D), const Color(0xFF004D30)]
-                              : [const Color(0xFF00A86B), const Color(0xFF007A4D)],
+                              ? [
+                                  const Color(0xFF007A4D),
+                                  const Color(0xFF004D30),
+                                ]
+                              : [
+                                  const Color(0xFF00A86B),
+                                  const Color(0xFF007A4D),
+                                ],
                         ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
@@ -516,7 +551,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                           CircleAvatar(
                             backgroundColor: Colors.white,
                             child: Icon(
-                              isSearching ? Icons.radar_rounded : Icons.two_wheeler_rounded,
+                              isSearching
+                                  ? Icons.radar_rounded
+                                  : Icons.two_wheeler_rounded,
                               color: AppColors.primary,
                               size: 22,
                             ),
@@ -542,13 +579,18 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                                       ? 'Đã vào hàng chờ • Chạm để theo dõi tiến trình'
                                       : 'Tài xế: ${ride.driverName ?? 'Đang kết nối...'} • Chạm để theo dõi',
                                   style: const TextStyle(
-                                      color: Colors.white70, fontSize: 11),
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(Icons.arrow_forward_ios_rounded,
-                              color: Colors.white, size: 16),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ],
                       ),
                     ),
@@ -574,7 +616,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => LiveTrackingScreen.delivery(deliveryId: delivery.id),
+                          builder: (_) => LiveTrackingScreen.delivery(
+                            deliveryId: delivery.id,
+                          ),
                         ),
                       );
                     }
@@ -602,7 +646,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         CircleAvatar(
                           backgroundColor: Colors.white,
                           child: Icon(
-                            isSearching ? Icons.hourglass_top_rounded : Icons.local_shipping_rounded,
+                            isSearching
+                                ? Icons.hourglass_top_rounded
+                                : Icons.local_shipping_rounded,
                             color: AppColors.secondary,
                             size: 22,
                           ),
@@ -616,8 +662,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                                 count > 1
                                     ? 'Bạn có $count đơn giao hàng đang xử lý!'
                                     : (isSearching
-                                        ? 'Giao hàng: Đang tìm tài xế (${delivery.id.substring(0, 8).toUpperCase()})'
-                                        : 'Đơn giao hàng đang vận chuyển!'),
+                                          ? 'Giao hàng: Đang tìm tài xế (${delivery.id.substring(0, 8).toUpperCase()})'
+                                          : 'Đơn giao hàng đang vận chuyển!'),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -629,16 +675,21 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                                 count > 1
                                     ? 'Chạm để xem danh sách chi tiết các đơn'
                                     : (isSearching
-                                        ? 'Đang trong danh sách chờ • Chạm để theo dõi'
-                                        : 'Tài xế: ${delivery.driverName ?? 'Đang giao...'} • Chạm để theo dõi'),
+                                          ? 'Đang trong danh sách chờ • Chạm để theo dõi'
+                                          : 'Tài xế: ${delivery.driverName ?? 'Đang giao...'} • Chạm để theo dõi'),
                                 style: const TextStyle(
-                                    color: Colors.white70, fontSize: 11),
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.arrow_forward_ios_rounded,
-                            color: Colors.white, size: 16),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                       ],
                     ),
                   ),
@@ -651,4 +702,3 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 }
-

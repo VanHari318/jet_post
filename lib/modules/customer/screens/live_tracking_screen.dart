@@ -3,7 +3,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
-import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/app_dialogs.dart';
 import '../../../models/delivery_model.dart';
 import '../../../models/driver_model.dart';
@@ -21,10 +20,10 @@ class LiveTrackingScreen extends StatefulWidget {
   final String? deliveryId;
 
   const LiveTrackingScreen.ride({super.key, required this.rideId})
-      : deliveryId = null;
+    : deliveryId = null;
 
   const LiveTrackingScreen.delivery({super.key, required this.deliveryId})
-      : rideId = null;
+    : rideId = null;
 
   bool get isDelivery => deliveryId != null;
 
@@ -34,12 +33,13 @@ class LiveTrackingScreen extends StatefulWidget {
 
 class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   final MapController _mapController = MapController();
-  final String _currentCustomerId = FirebaseService.currentUserId ?? '';
-
   bool _hasShownCompletionDialog = false;
 
   Future<void> _handleCancelTrip(
-      BuildContext context, String tripId, bool isDelivery) async {
+    BuildContext context,
+    String tripId,
+    bool isDelivery,
+  ) async {
     final reasonController = TextEditingController();
     final confirm = await showDialog<bool>(
       context: context,
@@ -183,7 +183,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             driverPlate: delivery.driverPlate,
             deliveryStatus: delivery.status,
             handoverOtp: delivery.handoverOtp,
-            canCancel: delivery.status == DeliveryStatus.pendingDriver ||
+            canCancel:
+                delivery.status == DeliveryStatus.pendingDriver ||
                 delivery.status == DeliveryStatus.accepted ||
                 delivery.status == DeliveryStatus.pickedUp,
           );
@@ -226,7 +227,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             driverPhone: ride.driverPhone,
             driverPlate: ride.driverPlate,
             rideStatus: ride.status,
-            canCancel: ride.status == RideStatus.pendingDriver ||
+            canCancel:
+                ride.status == RideStatus.pendingDriver ||
                 ride.status == RideStatus.accepted ||
                 ride.status == RideStatus.arrivedPickup,
           );
@@ -268,7 +270,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 : Stream.value(null),
             builder: (context, driverSnapshot) {
               final driver = driverSnapshot.data;
-              final driverLatLng = driver != null &&
+              final driverLatLng =
+                  driver != null &&
                       driver.currentLat != 0.0 &&
                       driver.currentLng != 0.0
                   ? LatLng(driver.currentLat, driver.currentLng)
@@ -284,8 +287,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    fallbackUrl: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    fallbackUrl:
+                        'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.example.jet_post',
                     maxZoom: 18,
                   ),
@@ -296,16 +301,22 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         point: pickupPoint,
                         width: 40,
                         height: 40,
-                        child: const Icon(Icons.person_pin_circle,
-                            color: AppColors.primary, size: 36),
+                        child: const Icon(
+                          Icons.person_pin_circle,
+                          color: AppColors.primary,
+                          size: 36,
+                        ),
                       ),
                       // Marker điểm đến
                       Marker(
                         point: dropoffPoint,
                         width: 40,
                         height: 40,
-                        child: const Icon(Icons.location_on,
-                            color: AppColors.secondary, size: 36),
+                        child: const Icon(
+                          Icons.location_on,
+                          color: AppColors.secondary,
+                          size: 36,
+                        ),
                       ),
                       // Marker tài xế di chuyển thời gian thực (xoay theo heading)
                       if (driver != null)
@@ -367,8 +378,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               return Container(
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.surfaceDark : Colors.white,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(24)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withAlpha(30),
@@ -408,8 +420,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.security,
-                                color: AppColors.secondary, size: 24),
+                            const Icon(
+                              Icons.security,
+                              color: AppColors.secondary,
+                              size: 24,
+                            ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
@@ -438,9 +453,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             const Text(
                               'Đọc cho tài xế\nkhi nhận hàng',
                               style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                  height: 1.2),
+                                fontSize: 10,
+                                color: Colors.grey,
+                                height: 1.2,
+                              ),
                               textAlign: TextAlign.right,
                             ),
                           ],
@@ -459,7 +475,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         driverName: driverName,
                         driverPhone: driverPhone,
                         driverPlate: driverPlate,
-                        currentCustomerId: _currentCustomerId,
                       )
                     else
                       _PendingDriverCard(
@@ -482,10 +497,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         padding: const EdgeInsets.only(bottom: 24),
                         child: Center(
                           child: TextButton.icon(
-                            onPressed: () => _handleCancelTrip(
-                                context, tripId, isDelivery),
-                            icon: const Icon(Icons.cancel_outlined,
-                                color: AppColors.error, size: 18),
+                            onPressed: () =>
+                                _handleCancelTrip(context, tripId, isDelivery),
+                            icon: const Icon(
+                              Icons.cancel_outlined,
+                              color: AppColors.error,
+                              size: 18,
+                            ),
                             label: const Text(
                               'Hủy Chuyến Đi Này',
                               style: TextStyle(
@@ -602,8 +620,11 @@ class _PendingDriverCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded,
-                    size: 16, color: AppColors.warning),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: AppColors.warning,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -624,4 +645,3 @@ class _PendingDriverCard extends StatelessWidget {
     );
   }
 }
-

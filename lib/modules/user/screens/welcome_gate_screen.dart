@@ -8,7 +8,7 @@ import '../../../models/user_model.dart';
 import '../../../routes/app_routes.dart';
 import '../services/user_service.dart';
 import 'kyc_pending_screen.dart';
-import 'phone_auth_screen.dart';
+import 'login_screen.dart';
 
 /// Màn hình Cổng vào Hợp nhất (UI Entry Point Gate) & Demo Role Switcher
 /// Cho phép điều phối vào 4 phân hệ độc lập và kiểm thử trực tiếp trước Hội đồng
@@ -47,11 +47,13 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
     });
 
     if (_currentUser == null) {
-      AppLogger.navigation('WelcomeGate', 'PhoneAuthScreen', {'targetRole': requiredRole.name});
+      AppLogger.navigation('WelcomeGate', 'LoginScreen', {
+        'targetRole': requiredRole.name,
+      });
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => PhoneAuthScreen(targetRole: requiredRole),
+          builder: (_) => LoginScreen(targetRole: requiredRole),
         ),
       ).then((_) => _checkSession());
       return;
@@ -62,13 +64,16 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
       return;
     }
 
-    if (requiredRole == UserRole.admin && _currentUser!.role != UserRole.admin) {
-      AppLogger.auth('Từ chối truy cập Cổng Admin: Người dùng không có quyền admin', {
-        'currentRole': _currentUser!.role.toFirestore(),
-      });
+    if (requiredRole == UserRole.admin &&
+        _currentUser!.role != UserRole.admin) {
+      AppLogger.auth(
+        'Từ chối truy cập Cổng Admin: Người dùng không có quyền admin',
+        {'currentRole': _currentUser!.role.toFirestore()},
+      );
       _showNoticeDialog(
         title: 'Quyền Quản Trị Viên',
-        message: 'Tài khoản của bạn hiện là ${_currentUser!.role.toFirestore()}. Bạn cần đăng nhập bằng tài khoản Admin để truy cập.',
+        message:
+            'Tài khoản của bạn hiện là ${_currentUser!.role.toFirestore()}. Bạn cần đăng nhập bằng tài khoản Admin để truy cập.',
       );
       return;
     }
@@ -78,7 +83,9 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
   }
 
   Future<void> _handleDriverEntry() async {
-    final driver = await UserService.instance.getDriverProfile(_currentUser!.id);
+    final driver = await UserService.instance.getDriverProfile(
+      _currentUser!.id,
+    );
 
     if (!mounted) return;
 
@@ -87,7 +94,9 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Text('Đăng Ký Đối Tác Tài Xế'),
           content: const Text(
             'Bạn chưa hoàn thành hồ sơ định danh điện tử eKYC. Bạn có muốn nộp hồ sơ bằng lái và CCCD ngay bây giờ?',
@@ -112,7 +121,8 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
     } else if (driver.status == DriverApprovalStatus.banned) {
       _showNoticeDialog(
         title: 'Tài Khoản Bị Khóa',
-        message: 'Tài khoản đối tác của bạn đã bị tạm khóa do vi phạm quy chế hoạt động.',
+        message:
+            'Tài khoản đối tác của bạn đã bị tạm khóa do vi phạm quy chế hoạt động.',
       );
     } else {
       Navigator.pushNamed(context, AppRoutes.driverDashboard);
@@ -141,13 +151,15 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => const PhoneAuthScreen(targetRole: UserRole.driver),
+          builder: (_) => const LoginScreen(targetRole: UserRole.driver),
         ),
       ).then((_) => _checkSession());
       return;
     }
     // Kiểm tra trạng thái hồ sơ tài xế hiện có
-    final driver = await UserService.instance.getDriverProfile(_currentUser!.id);
+    final driver = await UserService.instance.getDriverProfile(
+      _currentUser!.id,
+    );
     if (!mounted) return;
     if (driver != null) {
       if (driver.status == DriverApprovalStatus.pendingApproval) {
@@ -159,11 +171,17 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
         ).then((_) => _checkSession());
         return;
       } else if (driver.status == DriverApprovalStatus.active) {
-        Navigator.pushNamed(context, AppRoutes.driverDashboard).then((_) => _checkSession());
+        Navigator.pushNamed(
+          context,
+          AppRoutes.driverDashboard,
+        ).then((_) => _checkSession());
         return;
       }
     }
-    Navigator.pushNamed(context, AppRoutes.driverKyc).then((_) => _checkSession());
+    Navigator.pushNamed(
+      context,
+      AppRoutes.driverKyc,
+    ).then((_) => _checkSession());
   }
 
   @override
@@ -182,7 +200,11 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                 color: AppColors.primary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.electric_moped, color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.electric_moped,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -192,14 +214,25 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none),
+            tooltip: 'Thông báo',
+            onPressed: () =>
+                Navigator.pushNamed(context, AppRoutes.notifications),
+          ),
           // Nút Hộp thư Chat P2P
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
             tooltip: 'Tin nhắn P2P',
             onPressed: () {
-              AppLogger.userAction('WelcomeGate', 'Chạm icon Tin nhắn P2P', {'isLoggedIn': _currentUser != null});
+              AppLogger.userAction('WelcomeGate', 'Chạm icon Tin nhắn P2P', {
+                'isLoggedIn': _currentUser != null,
+              });
               if (_currentUser == null) {
-                Navigator.pushNamed(context, AppRoutes.phoneAuth).then((_) => _checkSession());
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.phoneAuth,
+                ).then((_) => _checkSession());
               } else {
                 Navigator.pushNamed(context, AppRoutes.messagesInbox);
               }
@@ -223,18 +256,30 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                 ? const SizedBox.shrink()
                 : InkWell(
                     onTap: () {
-                      AppLogger.userAction('WelcomeGate', 'Chạm Avatar / Tài khoản', {'isLoggedIn': _currentUser != null});
+                      AppLogger.userAction(
+                        'WelcomeGate',
+                        'Chạm Avatar / Tài khoản',
+                        {'isLoggedIn': _currentUser != null},
+                      );
                       if (_currentUser == null) {
-                        Navigator.pushNamed(context, AppRoutes.phoneAuth).then((_) => _checkSession());
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.phoneAuth,
+                        ).then((_) => _checkSession());
                       } else {
-                        Navigator.pushNamed(context, AppRoutes.userProfile).then((_) => _checkSession());
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.userProfile,
+                        ).then((_) => _checkSession());
                       }
                     },
                     borderRadius: BorderRadius.circular(20),
                     child: CircleAvatar(
                       radius: 17,
                       backgroundColor: AppColors.primary.withAlpha(40),
-                      backgroundImage: _currentUser?.avatarUrl != null && _currentUser!.avatarUrl!.isNotEmpty
+                      backgroundImage:
+                          _currentUser?.avatarUrl != null &&
+                              _currentUser!.avatarUrl!.isNotEmpty
                           ? NetworkImage(
                               CloudinaryService.instance.getOptimizedUrl(
                                 _currentUser!.avatarUrl!,
@@ -244,15 +289,23 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                             )
                           : null,
                       child: _currentUser == null
-                          ? const Icon(Icons.person, size: 18, color: AppColors.primary)
-                          : (_currentUser!.avatarUrl == null || _currentUser!.avatarUrl!.isEmpty)
-                              ? Text(
-                                  _currentUser!.fullName.isNotEmpty
-                                      ? _currentUser!.fullName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                )
-                              : null,
+                          ? const Icon(
+                              Icons.person,
+                              size: 18,
+                              color: AppColors.primary,
+                            )
+                          : (_currentUser!.avatarUrl == null ||
+                                _currentUser!.avatarUrl!.isEmpty)
+                          ? Text(
+                              _currentUser!.fullName.isNotEmpty
+                                  ? _currentUser!.fullName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            )
+                          : null,
                     ),
                   ),
           ),
@@ -286,7 +339,10 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withAlpha(50),
                         borderRadius: BorderRadius.circular(20),
@@ -294,7 +350,11 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.cloud_done, color: Colors.white, size: 14),
+                          const Icon(
+                            Icons.cloud_done,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -316,12 +376,20 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                     const SizedBox(height: 12),
                     const Text(
                       'Hệ Thống Giao Vận JetPost',
-                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Nền tảng tích hợp Xe ôm công nghệ & Giao hàng hỏa tốc - Đồ án Chuyên đề CNTT Nhóm 14',
-                      style: TextStyle(color: Colors.white.withAlpha(220), fontSize: 13, height: 1.4),
+                      style: TextStyle(
+                        color: Colors.white.withAlpha(220),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
@@ -330,7 +398,11 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               const SizedBox(height: 28),
               Row(
                 children: [
-                  const Icon(Icons.dashboard_customize, size: 20, color: AppColors.primary),
+                  const Icon(
+                    Icons.dashboard_customize,
+                    size: 20,
+                    color: AppColors.primary,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'CỔNG TRUY CẬP 4 PHÂN HỆ',
@@ -338,7 +410,9 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.1,
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                     ),
                   ),
                 ],
@@ -349,7 +423,8 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               _buildRoleCard(
                 context,
                 title: 'Phân hệ Khách Hàng',
-                subtitle: 'Đặt xe ôm di chuyển, tạo đơn gửi hàng & theo dõi hành trình',
+                subtitle:
+                    'Đặt xe ôm di chuyển, tạo đơn gửi hàng & theo dõi hành trình',
                 badgeText: 'Thành viên 1',
                 color: const Color(0xFF00A86B),
                 icon: Icons.person_pin_circle,
@@ -364,7 +439,8 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               _buildRoleCard(
                 context,
                 title: 'Đối Tác Tài Xế JetPost',
-                subtitle: 'Bật trực tuyến GPS, nhận cuốc 15s & xác nhận giao hàng PoD',
+                subtitle:
+                    'Bật trực tuyến GPS, nhận cuốc 15s & xác nhận giao hàng PoD',
                 badgeText: 'Thành viên 2 (Hải)',
                 color: const Color(0xFFFF6B00),
                 icon: Icons.two_wheeler,
@@ -379,15 +455,22 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               _buildRoleCard(
                 context,
                 title: 'Hồ Sơ & Bảo Mật Cá Nhân',
-                subtitle: 'Xem thông tin, đổi ảnh đại diện, đổi SĐT & liên kết email',
+                subtitle:
+                    'Xem thông tin, đổi ảnh đại diện, đổi SĐT & liên kết email',
                 badgeText: 'Thành viên 3',
                 color: const Color(0xFF7B1FA2),
                 icon: Icons.manage_accounts_outlined,
                 onTap: () {
                   if (_currentUser == null) {
-                    Navigator.pushNamed(context, AppRoutes.phoneAuth).then((_) => _checkSession());
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.phoneAuth,
+                    ).then((_) => _checkSession());
                   } else {
-                    Navigator.pushNamed(context, AppRoutes.userProfile).then((_) => _checkSession());
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.userProfile,
+                    ).then((_) => _checkSession());
                   }
                 },
               ),
@@ -398,7 +481,8 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               _buildRoleCard(
                 context,
                 title: 'Quản Trị Điều Hành Hệ Thống',
-                subtitle: 'Bàn cờ Radar toàn thành phố, thẩm định eKYC & cấu hình cước',
+                subtitle:
+                    'Bàn cờ Radar toàn thành phố, thẩm định eKYC & cấu hình cước',
                 badgeText: 'Thành viên 4',
                 color: const Color(0xFF1E88E5),
                 icon: Icons.admin_panel_settings,
@@ -410,20 +494,30 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               const SizedBox(height: 24),
 
               // Nút Đăng ký eKYC Tài Xế Nổi Bật (Nếu chưa đăng ký)
-              if (_currentUser == null || _currentUser!.role != UserRole.driver) ...[
+              if (_currentUser == null ||
+                  _currentUser!.role != UserRole.driver) ...[
                 InkWell(
                   onTap: _handleTapDriverEkyc,
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.surfaceDark : const Color(0xFFFFF8E1),
+                      color: isDark
+                          ? AppColors.surfaceDark
+                          : const Color(0xFFFFF8E1),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: const Color(0xFFFFB300)),
                     ),
                     child: const Row(
                       children: [
-                        Icon(Icons.badge_outlined, color: Color(0xFFE65100), size: 24),
+                        Icon(
+                          Icons.badge_outlined,
+                          color: Color(0xFFE65100),
+                          size: 24,
+                        ),
                         SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -431,17 +525,27 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                             children: [
                               Text(
                                 'Đăng Ký Gia Nhập Đối Tác Tài Xế (eKYC)',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.5,
+                                ),
                               ),
                               SizedBox(height: 2),
                               Text(
                                 'Chụp ảnh CCCD và Giấy phép lái xe gửi Admin xét duyệt',
-                                style: TextStyle(fontSize: 11.5, color: Color(0xFFE65100)),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Color(0xFFE65100),
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        Icon(Icons.arrow_forward, size: 16, color: Color(0xFFE65100)),
+                        Icon(
+                          Icons.arrow_forward,
+                          size: 16,
+                          color: Color(0xFFE65100),
+                        ),
                       ],
                     ),
                   ),
@@ -456,19 +560,27 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                   color: isDark ? AppColors.cardDark : Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                    color: isDark
+                        ? AppColors.borderDark
+                        : AppColors.borderLight,
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
+                    const Icon(
+                      Icons.check_circle_outline,
+                      color: AppColors.success,
+                      size: 20,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Phân hệ User: Phone Auth, eKYC Cloudinary & Chat P2P đã sẵn sàng!',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
                         ),
                       ),
                     ),
@@ -542,7 +654,10 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: color.withAlpha(25),
                           borderRadius: BorderRadius.circular(8),
@@ -563,7 +678,9 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12.5,
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                       height: 1.3,
                     ),
                   ),
@@ -571,7 +688,13 @@ class _WelcomeGateScreenState extends State<WelcomeGateScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 14,
+              color: isDark
+                  ? AppColors.textMutedDark
+                  : AppColors.textMutedLight,
+            ),
           ],
         ),
       ),

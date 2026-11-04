@@ -9,6 +9,7 @@ class MessageModel {
   final String receiverId; // UID người nhận tin
   final String content; // Nội dung văn bản tin nhắn
   final bool isRead; // Trạng thái đã xem tin nhắn
+  final bool isSystem; // Tin nhắn hệ thống phát sinh từ trạng thái đơn hàng
   final DateTime timestamp; // Thời điểm gửi tin nhắn
 
   MessageModel({
@@ -18,10 +19,14 @@ class MessageModel {
     required this.receiverId,
     required this.content,
     this.isRead = false,
+    this.isSystem = false,
     required this.timestamp,
   });
 
-  factory MessageModel.fromFirestore(DocumentSnapshot doc, String conversationId) {
+  factory MessageModel.fromFirestore(
+    DocumentSnapshot doc,
+    String conversationId,
+  ) {
     final data = doc.data() as Map<String, dynamic>? ?? {};
     return MessageModel(
       id: doc.id,
@@ -30,6 +35,7 @@ class MessageModel {
       receiverId: data['receiverId'] as String? ?? '',
       content: data['content'] as String? ?? '',
       isRead: data['isRead'] as bool? ?? false,
+      isSystem: data['isSystem'] as bool? ?? false,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -41,6 +47,7 @@ class MessageModel {
       'receiverId': receiverId,
       'content': content,
       'isRead': isRead,
+      'isSystem': isSystem,
       'timestamp': Timestamp.fromDate(timestamp),
     };
   }

@@ -13,6 +13,7 @@ import '../../../models/conversation_model.dart';
 import '../../../models/driver_model.dart';
 import '../../../models/message_model.dart';
 import '../../../models/user_model.dart';
+import 'notification_service.dart';
 
 /// Dịch vụ Nghiệp vụ Phân hệ User (Module 3)
 /// Quản lý Xác thực OTP, Hồ sơ cá nhân, eKYC Tài xế, Quản lý phiên và Chat P2P
@@ -37,7 +38,9 @@ class UserService {
 
       // Nếu không có UID đã lưu hoặc Firebase Auth không có user hiện tại
       if (savedUid == null || savedUid.isEmpty) {
-        AppLogger.auth('checkAutoLogin ➔ Không tìm thấy phiên lưu trữ trước đó');
+        AppLogger.auth(
+          'checkAutoLogin ➔ Không tìm thấy phiên lưu trữ trước đó',
+        );
         return null;
       }
 
@@ -48,7 +51,9 @@ class UserService {
           .get();
 
       if (!userDoc.exists) {
-        AppLogger.auth('checkAutoLogin ➔ Document người dùng không tồn tại trên Firestore');
+        AppLogger.auth(
+          'checkAutoLogin ➔ Document người dùng không tồn tại trên Firestore',
+        );
         await clearUserSession();
         return null;
       }
@@ -57,7 +62,10 @@ class UserService {
 
       // Nếu tài khoản bị khóa (BANNED) thì cưỡng chế đăng xuất
       if (user.isBanned) {
-        AppLogger.auth('checkAutoLogin ➔ Tài khoản đang bị BANNED, cưỡng chế đăng xuất', {'uid': user.id});
+        AppLogger.auth(
+          'checkAutoLogin ➔ Tài khoản đang bị BANNED, cưỡng chế đăng xuất',
+          {'uid': user.id},
+        );
         await clearUserSession();
         return null;
       }
@@ -104,7 +112,9 @@ class UserService {
       await prefs.remove(_prefKeyUserPhone);
       await prefs.remove(_prefKeyUserName);
       await FirebaseService.auth.signOut();
-      AppLogger.auth('Đã đăng xuất người dùng và dọn dẹp session', {'uid': uid});
+      AppLogger.auth('Đã đăng xuất người dùng và dọn dẹp session', {
+        'uid': uid,
+      });
     } catch (e) {
       AppLogger.error('UserService', 'Lỗi xóa session', e);
     }
@@ -145,23 +155,30 @@ class UserService {
         timeout: timeout,
         forceResendingToken: forceResendingToken,
         verificationCompleted: (PhoneAuthCredential credential) {
-          AppLogger.auth('SMS tự động xác thực thành công (Instant Verification)', {
-            'provider': credential.providerId,
-          });
+          AppLogger.auth(
+            'SMS tự động xác thực thành công (Instant Verification)',
+            {'provider': credential.providerId},
+          );
           onAutoVerified(credential);
         },
         verificationFailed: (FirebaseAuthException e) {
-          AppLogger.error('UserService', 'Gửi OTP thất bại: ${e.code} - ${e.message}');
+          AppLogger.error(
+            'UserService',
+            'Gửi OTP thất bại: ${e.code} - ${e.message}',
+          );
           String errorMsg = 'Gửi mã OTP thất bại. Vui lòng thử lại!';
           final msg = (e.message ?? '').toUpperCase();
           if (e.code == 'quota-exceeded') {
-            errorMsg = 'Hệ thống đã đạt hạn mức gửi tin nhắn hôm nay. Hãy sử dụng các số điện thoại thử nghiệm (Test Numbers)!';
+            errorMsg =
+                'Hệ thống đã đạt hạn mức gửi tin nhắn hôm nay. Hãy sử dụng các số điện thoại thử nghiệm (Test Numbers)!';
           } else if (e.code == 'invalid-phone-number') {
             errorMsg = 'Số điện thoại không hợp lệ!';
           } else if (e.code == 'too-many-requests') {
             errorMsg = 'Quá nhiều yêu cầu gửi mã. Vui lòng đợi ít phút!';
-          } else if (msg.contains('BILLING_NOT_ENABLED') || msg.contains('17499')) {
-            errorMsg = 'Firebase yêu cầu kích hoạt thanh toán (Blaze Plan) để gửi SMS viễn thông thực tế. Vui lòng thêm số của bạn vào "Phone numbers for testing" trên Firebase Console hoặc sử dụng các số mẫu có sẵn!';
+          } else if (msg.contains('BILLING_NOT_ENABLED') ||
+              msg.contains('17499')) {
+            errorMsg =
+                'Firebase yêu cầu kích hoạt thanh toán (Blaze Plan) để gửi SMS viễn thông thực tế. Vui lòng thêm số của bạn vào "Phone numbers for testing" trên Firebase Console hoặc sử dụng các số mẫu có sẵn!';
           }
           onError(errorMsg);
         },
@@ -173,7 +190,9 @@ class UserService {
           onCodeSent(verificationId, resendToken);
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          AppLogger.auth('Hết hạn tự động đọc mã OTP', {'verificationId': verificationId});
+          AppLogger.auth('Hết hạn tự động đọc mã OTP', {
+            'verificationId': verificationId,
+          });
         },
       );
     } catch (e) {
@@ -200,7 +219,9 @@ class UserService {
         smsCode: smsCode.trim(),
       );
 
-      final userCredential = await FirebaseService.auth.signInWithCredential(credential);
+      final userCredential = await FirebaseService.auth.signInWithCredential(
+        credential,
+      );
       final user = userCredential.user;
 
       if (user == null) {
@@ -217,11 +238,14 @@ class UserService {
       UserModel userModel;
       if (!userDoc.exists) {
         // Tạo người dùng mới lần đầu đăng nhập
-        AppLogger.auth('Người dùng mới lần đầu đăng nhập, tạo document Firestore mới', {
-          'uid': user.uid,
-          'phone': formattedPhone,
-          'role': defaultRole.toFirestore(),
-        });
+        AppLogger.auth(
+          'Người dùng mới lần đầu đăng nhập, tạo document Firestore mới',
+          {
+            'uid': user.uid,
+            'phone': formattedPhone,
+            'role': defaultRole.toFirestore(),
+          },
+        );
         userModel = UserModel(
           id: user.uid,
           phone: formattedPhone,
@@ -283,17 +307,18 @@ class UserService {
   /// Gửi mã OTP 6 số qua Email sử dụng Cloudflare Worker Serverless (Server-Side OTP)
   Future<Map<String, dynamic>> sendEmailOtp({
     required String email,
-    String type = 'REGISTER', // REGISTER | RESET_PASSWORD | CHANGE_PHONE | LINK_EMAIL
+    String type =
+        'REGISTER', // REGISTER | RESET_PASSWORD | CHANGE_PHONE | LINK_EMAIL
   }) async {
     try {
-      AppLogger.auth('Bắt đầu gửi OTP qua Email', {'email': email, 'type': type});
+      AppLogger.auth('Bắt đầu gửi OTP qua Email', {
+        'email': email,
+        'type': type,
+      });
       final response = await http.post(
         Uri.parse(OtpConfig.workerUrl),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email.trim().toLowerCase(),
-          'type': type,
-        }),
+        body: jsonEncode({'email': email.trim().toLowerCase(), 'type': type}),
       );
 
       final data = jsonDecode(response.body) as Map<String, dynamic>? ?? {};
@@ -305,17 +330,29 @@ class UserService {
         return {
           'success': true,
           'codeHash': data['codeHash'] as String? ?? '',
-          'expiresAt': data['expiresAt'] as int? ?? (DateTime.now().millisecondsSinceEpoch + 5 * 60 * 1000),
-          'message': data['message'] as String? ?? 'Đã gửi mã xác thực thành công!',
+          'expiresAt':
+              data['expiresAt'] as int? ??
+              (DateTime.now().millisecondsSinceEpoch + 5 * 60 * 1000),
+          'message':
+              data['message'] as String? ?? 'Đã gửi mã xác thực thành công!',
         };
       } else {
-        final errorMsg = data['error'] as String? ?? 'Không thể gửi email OTP (Mã lỗi ${response.statusCode})';
-        AppLogger.error('UserService', 'Lỗi Cloudflare Worker gửi OTP', errorMsg);
+        final errorMsg =
+            data['error'] as String? ??
+            'Không thể gửi email OTP (Mã lỗi ${response.statusCode})';
+        AppLogger.error(
+          'UserService',
+          'Lỗi Cloudflare Worker gửi OTP',
+          errorMsg,
+        );
         return {'success': false, 'error': errorMsg};
       }
     } catch (e) {
       AppLogger.error('UserService', 'Ngoại lệ khi gọi Cloudflare Worker', e);
-      return {'success': false, 'error': 'Lỗi kết nối tới máy chủ cấp phát OTP: $e'};
+      return {
+        'success': false,
+        'error': 'Lỗi kết nối tới máy chủ cấp phát OTP: $e',
+      };
     }
   }
 
@@ -327,7 +364,9 @@ class UserService {
     required int expiresAt,
   }) {
     if (DateTime.now().millisecondsSinceEpoch > expiresAt) {
-      AppLogger.auth('Mã OTP Email đã hết hạn hiệu lực (> 5 phút)', {'email': email});
+      AppLogger.auth('Mã OTP Email đã hết hạn hiệu lực (> 5 phút)', {
+        'email': email,
+      });
       return false;
     }
 
@@ -337,7 +376,8 @@ class UserService {
     final digest = sha256.convert(bytes);
     final calculatedHash = digest.toString();
 
-    final isMatched = calculatedHash.toLowerCase() == expectedHash.trim().toLowerCase();
+    final isMatched =
+        calculatedHash.toLowerCase() == expectedHash.trim().toLowerCase();
     AppLogger.auth('Đối soát mã OTP Email', {
       'email': email,
       'isMatched': isMatched,
@@ -354,12 +394,15 @@ class UserService {
   }) async {
     try {
       final cleanEmail = email.trim().toLowerCase();
-      AppLogger.auth('Bắt đầu đăng ký tài khoản Email & Password', {'email': cleanEmail});
+      AppLogger.auth('Bắt đầu đăng ký tài khoản Email & Password', {
+        'email': cleanEmail,
+      });
 
-      final userCredential = await FirebaseService.auth.createUserWithEmailAndPassword(
-        email: cleanEmail,
-        password: password,
-      );
+      final userCredential = await FirebaseService.auth
+          .createUserWithEmailAndPassword(
+            email: cleanEmail,
+            password: password,
+          );
 
       final user = userCredential.user;
       if (user == null) {
@@ -395,7 +438,11 @@ class UserService {
       });
       return userModel;
     } on FirebaseAuthException catch (e) {
-      AppLogger.error('UserService', 'Lỗi FirebaseAuth khi đăng ký: ${e.code}', e.message);
+      AppLogger.error(
+        'UserService',
+        'Lỗi FirebaseAuth khi đăng ký: ${e.code}',
+        e.message,
+      );
       String msg = 'Đăng ký thất bại.';
       if (e.code == 'email-already-in-use') {
         msg = 'Email này đã được sử dụng bởi một tài khoản khác.';
@@ -418,12 +465,12 @@ class UserService {
   }) async {
     try {
       final cleanEmail = email.trim().toLowerCase();
-      AppLogger.auth('Bắt đầu đăng nhập bằng Email & Password', {'email': cleanEmail});
+      AppLogger.auth('Bắt đầu đăng nhập bằng Email & Password', {
+        'email': cleanEmail,
+      });
 
-      final userCredential = await FirebaseService.auth.signInWithEmailAndPassword(
-        email: cleanEmail,
-        password: password,
-      );
+      final userCredential = await FirebaseService.auth
+          .signInWithEmailAndPassword(email: cleanEmail, password: password);
 
       final user = userCredential.user;
       if (user == null) {
@@ -441,14 +488,16 @@ class UserService {
         final role = cleanEmail.contains('admin')
             ? UserRole.admin
             : (cleanEmail.contains('tai') || cleanEmail.contains('driver')
-                ? UserRole.driver
-                : UserRole.customer);
+                  ? UserRole.driver
+                  : UserRole.customer);
 
         userModel = UserModel(
           id: user.uid,
           phone: '',
           email: cleanEmail,
-          fullName: user.displayName ?? (role == UserRole.admin ? 'Quản Trị Viên' : 'Người dùng'),
+          fullName:
+              user.displayName ??
+              (role == UserRole.admin ? 'Quản Trị Viên' : 'Người dùng'),
           role: role,
           authProviders: ['email'],
           isEmailVerified: user.emailVerified,
@@ -463,7 +512,9 @@ class UserService {
 
       if (userModel.isBanned) {
         await clearUserSession();
-        throw Exception('Tài khoản của bạn đã bị khóa do vi phạm chính sách hệ thống.');
+        throw Exception(
+          'Tài khoản của bạn đã bị khóa do vi phạm chính sách hệ thống.',
+        );
       }
 
       await saveUserSession(userModel);
@@ -474,9 +525,15 @@ class UserService {
       });
       return userModel;
     } on FirebaseAuthException catch (e) {
-      AppLogger.error('UserService', 'Lỗi FirebaseAuth khi đăng nhập: ${e.code}', e.message);
+      AppLogger.error(
+        'UserService',
+        'Lỗi FirebaseAuth khi đăng nhập: ${e.code}',
+        e.message,
+      );
       String msg = 'Đăng nhập thất bại.';
-      if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+      if (e.code == 'user-not-found' ||
+          e.code == 'wrong-password' ||
+          e.code == 'invalid-credential') {
         msg = 'Email hoặc mật khẩu không chính xác.';
       } else if (e.code == 'user-disabled') {
         msg = 'Tài khoản này đã bị vô hiệu hóa.';
@@ -516,13 +573,16 @@ class UserService {
           .collection(FirebaseService.colUsers)
           .doc(user.uid)
           .update({
-        'email': cleanEmail,
-        'isEmailVerified': true,
-        'authProviders': FieldValue.arrayUnion(['email']),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+            'email': cleanEmail,
+            'isEmailVerified': true,
+            'authProviders': FieldValue.arrayUnion(['email']),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
-      AppLogger.auth('Liên kết Email thành công', {'uid': user.uid, 'email': cleanEmail});
+      AppLogger.auth('Liên kết Email thành công', {
+        'uid': user.uid,
+        'email': cleanEmail,
+      });
       return true;
     } on FirebaseAuthException catch (e) {
       AppLogger.error('UserService', 'Lỗi link email: ${e.code}', e.message);
@@ -546,7 +606,9 @@ class UserService {
   }) async {
     final user = FirebaseService.auth.currentUser;
     if (user == null || user.email == null) {
-      throw Exception('Tài khoản hiện tại chưa có thông tin Email để đổi mật khẩu.');
+      throw Exception(
+        'Tài khoản hiện tại chưa có thông tin Email để đổi mật khẩu.',
+      );
     }
 
     try {
@@ -574,9 +636,13 @@ class UserService {
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
         throw Exception('Mật khẩu hiện tại không chính xác.');
       } else if (e.code == 'weak-password') {
-        throw Exception('Mật khẩu mới quá yếu. Vui lòng nhập tối thiểu 6 ký tự.');
+        throw Exception(
+          'Mật khẩu mới quá yếu. Vui lòng nhập tối thiểu 6 ký tự.',
+        );
       } else if (e.code == 'requires-recent-login') {
-        throw Exception('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại trước khi đổi mật khẩu.');
+        throw Exception(
+          'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại trước khi đổi mật khẩu.',
+        );
       } else {
         throw Exception(e.message ?? 'Đổi mật khẩu thất bại.');
       }
@@ -609,7 +675,9 @@ class UserService {
 
       // Nếu tài khoản đã có SĐT (providerId: 'phone') -> dùng updatePhoneNumber() để đổi số.
       // Nếu là tài khoản Email thuần túy chưa có SĐT -> dùng linkWithCredential() để liên kết lần đầu.
-      final hasPhoneProvider = user.providerData.any((p) => p.providerId == 'phone');
+      final hasPhoneProvider = user.providerData.any(
+        (p) => p.providerId == 'phone',
+      );
       if (hasPhoneProvider) {
         await user.updatePhoneNumber(credential);
       } else {
@@ -628,18 +696,25 @@ class UserService {
           .collection(FirebaseService.colUsers)
           .doc(user.uid)
           .update({
-        'phone': formattedPhone,
-        'authProviders': FieldValue.arrayUnion(['phone']),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+            'phone': formattedPhone,
+            'authProviders': FieldValue.arrayUnion(['phone']),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefKeyUserPhone, formattedPhone);
 
-      AppLogger.auth('Liên kết/Đổi SĐT thành công', {'uid': user.uid, 'phone': formattedPhone});
+      AppLogger.auth('Liên kết/Đổi SĐT thành công', {
+        'uid': user.uid,
+        'phone': formattedPhone,
+      });
       return true;
     } on FirebaseAuthException catch (e) {
-      AppLogger.error('UserService', 'Lỗi liên kết/đổi SĐT: ${e.code}', e.message);
+      AppLogger.error(
+        'UserService',
+        'Lỗi liên kết/đổi SĐT: ${e.code}',
+        e.message,
+      );
       String msg = 'Cập nhật số điện thoại thất bại.';
       if (e.code == 'credential-already-in-use') {
         msg = 'Số điện thoại này đã được liên kết với một tài khoản khác.';
@@ -658,7 +733,10 @@ class UserService {
   }
 
   /// Kiểm tra tiền trạm xem Số điện thoại đã được đăng ký bởi tài khoản nào chưa
-  Future<bool> isPhoneAlreadyRegistered(String rawOrFormattedPhone, {String? excludeUid}) async {
+  Future<bool> isPhoneAlreadyRegistered(
+    String rawOrFormattedPhone, {
+    String? excludeUid,
+  }) async {
     try {
       final formattedPhone = formatToE164(rawOrFormattedPhone);
       final query = await FirebaseService.firestore
@@ -680,7 +758,10 @@ class UserService {
   }
 
   /// Kiểm tra tiền trạm xem Biển số xe đã được đăng ký trong hệ thống đối tác chưa
-  Future<bool> isPlateAlreadyRegistered(String plateNumber, {String? excludeDriverId}) async {
+  Future<bool> isPlateAlreadyRegistered(
+    String plateNumber, {
+    String? excludeDriverId,
+  }) async {
     try {
       final cleanPlate = plateNumber.trim().toUpperCase();
       final query = await FirebaseService.firestore
@@ -702,7 +783,10 @@ class UserService {
   }
 
   /// Kiểm tra tiền trạm xem Email đã được đăng ký bởi tài khoản nào chưa
-  Future<bool> isEmailAlreadyRegistered(String email, {String? excludeUid}) async {
+  Future<bool> isEmailAlreadyRegistered(
+    String email, {
+    String? excludeUid,
+  }) async {
     try {
       final cleanEmail = email.trim().toLowerCase();
       final query = await FirebaseService.firestore
@@ -783,7 +867,10 @@ class UserService {
         await prefs.setString(_prefKeyUserName, fullName.trim());
       }
 
-      AppLogger.info('UserService', 'Cập nhật Profile thành công cho UID: $uid');
+      AppLogger.info(
+        'UserService',
+        'Cập nhật Profile thành công cho UID: $uid',
+      );
       return true;
     } catch (e) {
       AppLogger.error('UserService', 'Lỗi cập nhật profile', e);
@@ -802,14 +889,17 @@ class UserService {
           .collection(FirebaseService.colUsers)
           .doc(uid)
           .update({
-        'phone': formatted,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+            'phone': formatted,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefKeyUserPhone, formatted);
 
-      AppLogger.auth('Đổi số điện thoại thành công', {'uid': uid, 'newPhone': formatted});
+      AppLogger.auth('Đổi số điện thoại thành công', {
+        'uid': uid,
+        'newPhone': formatted,
+      });
       return true;
     } catch (e) {
       AppLogger.error('UserService', 'Lỗi cập nhật số điện thoại', e);
@@ -833,7 +923,11 @@ class UserService {
     if (uid == null) return false;
 
     try {
-      AppLogger.ekyc('Nộp hồ sơ', 'Bắt đầu ghi dữ liệu lên Firestore', 'Xe: $vehicleType, Biển số: $plateNumber');
+      AppLogger.ekyc(
+        'Nộp hồ sơ',
+        'Bắt đầu ghi dữ liệu lên Firestore',
+        'Xe: $vehicleType, Biển số: $plateNumber',
+      );
 
       final driverDocRef = FirebaseService.firestore
           .collection(FirebaseService.colDrivers)
@@ -865,7 +959,11 @@ class UserService {
       // Hồ sơ đối tác được lưu trong collection `drivers` ở trạng thái `pendingApproval`.
       // Chỉ khi Admin thẩm định CCCD/GPLX và bấm "Phê duyệt" (Task 4.3), tài khoản mới được kích hoạt làm tài xế.
 
-      AppLogger.ekyc('Nộp hồ sơ', 'HOÀN TẤT', 'UID: $uid đã nộp hồ sơ đối tác tài xế, trạng thái pendingApproval');
+      AppLogger.ekyc(
+        'Nộp hồ sơ',
+        'HOÀN TẤT',
+        'UID: $uid đã nộp hồ sơ đối tác tài xế, trạng thái pendingApproval',
+      );
       return true;
     } catch (e) {
       AppLogger.error('UserService', 'Lỗi gửi hồ sơ eKYC', e);
@@ -903,13 +1001,13 @@ class UserService {
         .where('participants', arrayContains: uid)
         .snapshots()
         .map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => ConversationModel.fromFirestore(doc))
-          .toList();
-      // Sắp xếp thời gian mới nhất lên đầu trong bộ nhớ để không yêu cầu tạo composite index trên Firestore
-      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      return list;
-    });
+          final list = snapshot.docs
+              .map((doc) => ConversationModel.fromFirestore(doc))
+              .toList();
+          // Sắp xếp thời gian mới nhất lên đầu trong bộ nhớ để không yêu cầu tạo composite index trên Firestore
+          list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+          return list;
+        });
   }
 
   /// Lắng nghe danh sách tin nhắn thời gian thực trong 1 phòng chat
@@ -921,10 +1019,10 @@ class UserService {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => MessageModel.fromFirestore(doc, chatId))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => MessageModel.fromFirestore(doc, chatId))
+              .toList();
+        });
   }
 
   /// Tạo hoặc lấy mã phòng chat duy nhất theo chuẩn alphabet (O(1))
@@ -952,21 +1050,12 @@ class UserService {
         id: chatId,
         participants: [myUid, targetUserId],
         participantDetails: {
-          myUid: {
-            'name': myName,
-            'avatar': myAvatar,
-          },
-          targetUserId: {
-            'name': targetName,
-            'avatar': targetAvatar,
-          },
+          myUid: {'name': myName, 'avatar': myAvatar},
+          targetUserId: {'name': targetName, 'avatar': targetAvatar},
         },
         lastMessage: 'Đã bắt đầu cuộc trò chuyện',
         lastSenderId: myUid,
-        unreadCount: {
-          myUid: 0,
-          targetUserId: 0,
-        },
+        unreadCount: {myUid: 0, targetUserId: 0},
         updatedAt: DateTime.now(),
       );
 
@@ -981,6 +1070,7 @@ class UserService {
     required String chatId,
     required String receiverId,
     required String content,
+    bool isSystem = false,
   }) async {
     final senderId = FirebaseService.currentUserId;
     if (senderId == null || content.trim().isEmpty) return;
@@ -1001,6 +1091,7 @@ class UserService {
       receiverId: receiverId,
       content: trimmed,
       isRead: false,
+      isSystem: isSystem,
       timestamp: now,
     );
 
@@ -1018,8 +1109,46 @@ class UserService {
       'chatId': chatId,
       'to': receiverId,
       'length': trimmed.length,
-      'content': trimmed.length > 25 ? '${trimmed.substring(0, 25)}...' : trimmed,
+      'content': trimmed.length > 25
+          ? '${trimmed.substring(0, 25)}...'
+          : trimmed,
     });
+  }
+
+  Future<void> sendOrderStatusUpdate({
+    required String recipientUid,
+    required String recipientName,
+    required String orderId,
+    required String orderType,
+    required String title,
+    required String body,
+  }) async {
+    if (recipientUid.isEmpty) {
+      AppLogger.error(
+        'UserService',
+        'Không thể gửi thông báo/chat trạng thái đơn vì UID người nhận bị trống',
+      );
+      return;
+    }
+
+    await NotificationService.instance.createOrderStatusNotification(
+      recipientUid: recipientUid,
+      title: title,
+      body: body,
+      orderId: orderId,
+      orderType: orderType,
+    );
+
+    final chatId = await getOrCreateConversation(
+      targetUserId: recipientUid,
+      targetName: recipientName,
+    );
+    await sendMessage(
+      chatId: chatId,
+      receiverId: recipientUid,
+      content: '$title\n$body',
+      isSystem: true,
+    );
   }
 
   /// Đánh dấu đã đọc toàn bộ tin nhắn trong phòng chat
@@ -1031,9 +1160,7 @@ class UserService {
       await FirebaseService.firestore
           .collection(FirebaseService.colConversations)
           .doc(chatId)
-          .update({
-        'unreadCount.$myUid': 0,
-      });
+          .update({'unreadCount.$myUid': 0});
       AppLogger.chat('Đã đánh dấu đã đọc cuộc hội thoại', {'chatId': chatId});
     } catch (e) {
       AppLogger.error('UserService', 'Lỗi đánh dấu đã đọc', e);

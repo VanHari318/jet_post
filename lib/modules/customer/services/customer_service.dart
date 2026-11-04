@@ -6,6 +6,7 @@ import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/geohash_util.dart';
 import '../../../models/delivery_model.dart';
+import '../../user/services/user_service.dart';
 import '../../../models/driver_model.dart';
 import '../../../models/ride_model.dart';
 import '../../../models/saved_address_model.dart';
@@ -26,7 +27,9 @@ class CustomerService {
   // -------------------------------------------------------------
 
   /// Lấy cấu hình hệ thống từ Firestore (có cache 5 phút để tối ưu số lần đọc)
-  Future<SystemSettingsModel> getSystemSettings({bool forceRefresh = false}) async {
+  Future<SystemSettingsModel> getSystemSettings({
+    bool forceRefresh = false,
+  }) async {
     final now = DateTime.now();
     if (!forceRefresh &&
         _cachedSettings != null &&
@@ -49,7 +52,11 @@ class CustomerService {
       _settingsFetchedAt = now;
       return _cachedSettings!;
     } catch (e) {
-      AppLogger.error('CustomerService', 'Lỗi tải biểu cước hệ thống, dùng mặc định', e);
+      AppLogger.error(
+        'CustomerService',
+        'Lỗi tải biểu cước hệ thống, dùng mặc định',
+        e,
+      );
       _cachedSettings = SystemSettingsModel(updatedAt: now);
       return _cachedSettings!;
     }
@@ -71,11 +78,12 @@ class CustomerService {
   }) async {
     final settings = await getSystemSettings();
     return settings.calculateDeliveryPrice(
-      distanceKm,
-      weightKg: weightKg,
-      isFragile: isFragile,
-      isExpress: isExpress,
-    ) + packageSurcharge;
+          distanceKm,
+          weightKg: weightKg,
+          isFragile: isFragile,
+          isExpress: isExpress,
+        ) +
+        packageSurcharge;
   }
 
   // -------------------------------------------------------------
@@ -98,8 +106,14 @@ class CustomerService {
     String? routePolyline,
   }) async {
     try {
-      final pickupGeohash = GeohashUtil.encode(pickupLat, pickupLng, precision: 5);
-      final ridesRef = FirebaseService.firestore.collection(FirebaseService.colRides);
+      final pickupGeohash = GeohashUtil.encode(
+        pickupLat,
+        pickupLng,
+        precision: 5,
+      );
+      final ridesRef = FirebaseService.firestore.collection(
+        FirebaseService.colRides,
+      );
       final newDocRef = ridesRef.doc();
 
       final ride = RideModel(
@@ -124,12 +138,16 @@ class CustomerService {
 
       await newDocRef.set(ride.toFirestore());
 
-      AppLogger.userAction('CustomerService', 'Tạo cuốc xe JetBike thành công', {
-        'rideId': newDocRef.id,
-        'pickup': pickupAddress,
-        'dropoff': dropoffAddress,
-        'price': price,
-      });
+      AppLogger.userAction(
+        'CustomerService',
+        'Tạo cuốc xe JetBike thành công',
+        {
+          'rideId': newDocRef.id,
+          'pickup': pickupAddress,
+          'dropoff': dropoffAddress,
+          'price': price,
+        },
+      );
 
       return newDocRef.id;
     } catch (e) {
@@ -165,11 +183,17 @@ class CustomerService {
     String? routePolyline,
   }) async {
     try {
-      final pickupGeohash = GeohashUtil.encode(pickupLat, pickupLng, precision: 5);
+      final pickupGeohash = GeohashUtil.encode(
+        pickupLat,
+        pickupLng,
+        precision: 5,
+      );
       // Sinh mã OTP 4 số bàn giao ngẫu nhiên (1000 - 9999)
       final handoverOtp = (1000 + Random().nextInt(9000)).toString();
 
-      final deliveriesRef = FirebaseService.firestore.collection(FirebaseService.colDeliveries);
+      final deliveriesRef = FirebaseService.firestore.collection(
+        FirebaseService.colDeliveries,
+      );
       final newDocRef = deliveriesRef.doc();
 
       final delivery = DeliveryModel(
@@ -206,12 +230,16 @@ class CustomerService {
 
       await newDocRef.set(delivery.toFirestore());
 
-      AppLogger.userAction('CustomerService', 'Tạo đơn giao hàng JetExpress thành công', {
-        'deliveryId': newDocRef.id,
-        'receiverPhone': receiverPhone,
-        'handoverOtp': handoverOtp,
-        'price': price,
-      });
+      AppLogger.userAction(
+        'CustomerService',
+        'Tạo đơn giao hàng JetExpress thành công',
+        {
+          'deliveryId': newDocRef.id,
+          'receiverPhone': receiverPhone,
+          'handoverOtp': handoverOtp,
+          'price': price,
+        },
+      );
 
       return newDocRef.id;
     } catch (e) {
@@ -231,9 +259,9 @@ class CustomerService {
         .doc(rideId)
         .snapshots()
         .map((snapshot) {
-      if (!snapshot.exists || snapshot.data() == null) return null;
-      return RideModel.fromFirestore(snapshot);
-    });
+          if (!snapshot.exists || snapshot.data() == null) return null;
+          return RideModel.fromFirestore(snapshot);
+        });
   }
 
   /// Stream lắng nghe trạng thái đơn giao hàng
@@ -243,9 +271,9 @@ class CustomerService {
         .doc(deliveryId)
         .snapshots()
         .map((snapshot) {
-      if (!snapshot.exists || snapshot.data() == null) return null;
-      return DeliveryModel.fromFirestore(snapshot);
-    });
+          if (!snapshot.exists || snapshot.data() == null) return null;
+          return DeliveryModel.fromFirestore(snapshot);
+        });
   }
 
   /// Stream lắng nghe tọa độ & thông tin tài xế thực hiện cuốc
@@ -255,9 +283,9 @@ class CustomerService {
         .doc(driverId)
         .snapshots()
         .map((snapshot) {
-      if (!snapshot.exists || snapshot.data() == null) return null;
-      return DriverModel.fromFirestore(snapshot);
-    });
+          if (!snapshot.exists || snapshot.data() == null) return null;
+          return DriverModel.fromFirestore(snapshot);
+        });
   }
 
   // -------------------------------------------------------------
@@ -271,14 +299,33 @@ class CustomerService {
     required String cancelledBy, // 'customer' | 'system'
   }) async {
     try {
+      final rideRef = FirebaseService.firestore
+          .collection(FirebaseService.colRides)
+          .doc(rideId);
+      final rideSnapshot = await rideRef.get();
+      final rideData = rideSnapshot.data();
       await FirebaseService.firestore
           .collection(FirebaseService.colRides)
           .doc(rideId)
           .update({
-        'status': RideStatus.cancelled.toFirestore(),
-        'cancelReason': reason,
-        'cancelledBy': cancelledBy,
-      });
+            'status': RideStatus.cancelled.toFirestore(),
+            'cancelReason': reason,
+            'cancelledBy': cancelledBy,
+          });
+
+      final driverId = rideData?['driverId'] as String?;
+      if (cancelledBy == 'customer' &&
+          driverId != null &&
+          driverId.isNotEmpty) {
+        await _notifyDriverCancellation(
+          driverId: driverId,
+          driverName: rideData?['driverName'] as String? ?? 'Tài xế',
+          orderId: rideId,
+          orderType: 'ride',
+          title: 'Đơn hàng đã bị hủy',
+          body: 'Khách hàng đã hủy cuốc xe. Lý do: $reason',
+        );
+      }
 
       AppLogger.userAction('CustomerService', 'Hủy cuốc xe JetBike', {
         'rideId': rideId,
@@ -298,14 +345,33 @@ class CustomerService {
     required String cancelledBy,
   }) async {
     try {
+      final deliveryRef = FirebaseService.firestore
+          .collection(FirebaseService.colDeliveries)
+          .doc(deliveryId);
+      final deliverySnapshot = await deliveryRef.get();
+      final deliveryData = deliverySnapshot.data();
       await FirebaseService.firestore
           .collection(FirebaseService.colDeliveries)
           .doc(deliveryId)
           .update({
-        'status': DeliveryStatus.cancelled.toFirestore(),
-        'cancelReason': reason,
-        'cancelledBy': cancelledBy,
-      });
+            'status': DeliveryStatus.cancelled.toFirestore(),
+            'cancelReason': reason,
+            'cancelledBy': cancelledBy,
+          });
+
+      final driverId = deliveryData?['driverId'] as String?;
+      if (cancelledBy == 'customer' &&
+          driverId != null &&
+          driverId.isNotEmpty) {
+        await _notifyDriverCancellation(
+          driverId: driverId,
+          driverName: deliveryData?['driverName'] as String? ?? 'Tài xế',
+          orderId: deliveryId,
+          orderType: 'delivery',
+          title: 'Đơn hàng đã bị hủy',
+          body: 'Người gửi đã hủy đơn giao hàng. Lý do: $reason',
+        );
+      }
 
       AppLogger.userAction('CustomerService', 'Hủy đơn giao hàng JetExpress', {
         'deliveryId': deliveryId,
@@ -315,6 +381,33 @@ class CustomerService {
     } catch (e) {
       AppLogger.error('CustomerService', 'Lỗi hủy đơn giao hàng', e);
       throw Exception('Không thể hủy đơn giao hàng: $e');
+    }
+  }
+
+  Future<void> _notifyDriverCancellation({
+    required String driverId,
+    required String driverName,
+    required String orderId,
+    required String orderType,
+    required String title,
+    required String body,
+  }) async {
+    try {
+      await UserService.instance.sendOrderStatusUpdate(
+        recipientUid: driverId,
+        recipientName: driverName,
+        orderId: orderId,
+        orderType: orderType,
+        title: title,
+        body: body,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'CustomerService',
+        'Không gửi được thông báo/chat hủy đơn $orderId',
+        error,
+        stackTrace,
+      );
     }
   }
 
@@ -332,8 +425,10 @@ class CustomerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((d) => DeliveryModel.fromFirestore(d)).toList();
-    });
+          return snapshot.docs
+              .map((d) => DeliveryModel.fromFirestore(d))
+              .toList();
+        });
   }
 
   // -------------------------------------------------------------
@@ -342,37 +437,47 @@ class CustomerService {
 
   /// Stream toàn bộ danh sách cuốc xe của khách hàng (sắp xếp giảm dần theo thời gian trong bộ nhớ)
   Stream<List<RideModel>> streamCustomerRides(String customerId) {
-    final uid = customerId.isNotEmpty ? customerId : (FirebaseService.currentUserId ?? '');
+    final uid = customerId.isNotEmpty
+        ? customerId
+        : (FirebaseService.currentUserId ?? '');
     if (uid.isEmpty) return Stream.value([]);
     return FirebaseService.firestore
         .collection(FirebaseService.colRides)
         .where('customerId', isEqualTo: uid)
         .snapshots()
         .map((snapshot) {
-      final list = snapshot.docs.map((d) => RideModel.fromFirestore(d)).toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    });
+          final list = snapshot.docs
+              .map((d) => RideModel.fromFirestore(d))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
   }
 
   /// Stream toàn bộ danh sách đơn giao hàng của khách gửi (sắp xếp giảm dần theo thời gian trong bộ nhớ)
   Stream<List<DeliveryModel>> streamCustomerDeliveries(String senderId) {
-    final uid = senderId.isNotEmpty ? senderId : (FirebaseService.currentUserId ?? '');
+    final uid = senderId.isNotEmpty
+        ? senderId
+        : (FirebaseService.currentUserId ?? '');
     if (uid.isEmpty) return Stream.value([]);
     return FirebaseService.firestore
         .collection(FirebaseService.colDeliveries)
         .where('senderId', isEqualTo: uid)
         .snapshots()
         .map((snapshot) {
-      final list = snapshot.docs.map((d) => DeliveryModel.fromFirestore(d)).toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    });
+          final list = snapshot.docs
+              .map((d) => DeliveryModel.fromFirestore(d))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
   }
 
   /// Kiểm tra cuốc xe ôm đang hoạt động của khách (Hàng chờ xe ôm tối đa 1 phần tử)
   Future<RideModel?> getActiveRide(String customerId) async {
-    final uid = customerId.isNotEmpty ? customerId : (FirebaseService.currentUserId ?? '');
+    final uid = customerId.isNotEmpty
+        ? customerId
+        : (FirebaseService.currentUserId ?? '');
     if (uid.isEmpty) return null;
     try {
       final snap = await FirebaseService.firestore
@@ -411,10 +516,7 @@ class CustomerService {
       await FirebaseService.firestore
           .collection(FirebaseService.colRides)
           .doc(rideId)
-          .update({
-        'rating': rating,
-        'reviewComment': reviewComment,
-      });
+          .update({'rating': rating, 'reviewComment': reviewComment});
 
       // 2. Cập nhật rating vào tài liệu tài xế
       if (driverId.isNotEmpty) {
@@ -462,10 +564,7 @@ class CustomerService {
       await FirebaseService.firestore
           .collection(FirebaseService.colDeliveries)
           .doc(deliveryId)
-          .update({
-        'rating': rating,
-        'reviewComment': reviewComment,
-      });
+          .update({'rating': rating, 'reviewComment': reviewComment});
 
       if (driverId.isNotEmpty) {
         final driverDocRef = FirebaseService.firestore
@@ -516,10 +615,10 @@ class CustomerService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => SavedAddressModel.fromFirestore(doc, userId))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => SavedAddressModel.fromFirestore(doc, userId))
+              .toList();
+        });
   }
 
   /// Thêm địa chỉ quen thuộc mới
@@ -575,4 +674,3 @@ class CustomerService {
     }
   }
 }
-
